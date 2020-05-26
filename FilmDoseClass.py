@@ -133,11 +133,12 @@ class FilmDose:
         self.ODref = np.mean(self.ROI,axis=(0,1))
 
         # Solicita el valor de la dosis de referencia
-        application_window = tk.Tk().withdraw()
+        application_window = tk.Tk()
+        application_window.withdraw()
         answer = simpledialog.askstring("Input", "Introduce de reference dose (Gy)",
                                         parent=application_window)
         self.Dref.fill(np.float(answer))
-        
+        application_window.destroy()
         # Calcula la ODnet que corresponde a la dosis de referencia usando la curva de calibración.
         ODnetRefCal = np.array([0.0,0.0,0.0])
         for c in np.array([0,1,2]): 
@@ -183,8 +184,10 @@ class FilmDose:
         count = 0
         file_path = 'something'
         while True:
-            tk.Tk().withdraw()
+            appwindow = tk.Tk()
+            appwindow.withdraw()
             file_path = filedialog.askopenfilename(title='Select FlatScan file {}.'.format(count + 1))
+            appwindow.destroy()
             count = count + 1
             if not file_path:
                 break

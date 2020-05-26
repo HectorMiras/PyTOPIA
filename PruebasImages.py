@@ -8,9 +8,11 @@ from tkinter import simpledialog
 def main():
     
     # carga la imagen a procesar
-    tk.Tk().withdraw()
+    root = tk.Tk()
+    root.withdraw()
     file_path = filedialog.askopenfilename(title='Open Tif Image')
     filmDoseObj = FilmDoseClass.FilmDose(file_path)
+    root.destroy()
     
     # Carga los ficheros de flatscanner (1D)
     # selecciona cancelar cuando ya no se quieran cargar más ficheros
@@ -19,8 +21,10 @@ def main():
     FSmatrix = filmDoseObj.ApplyFlatScanCorr()
 
     # Carga calibración desde fichero
-    tk.Tk().withdraw()
+    root = tk.Tk()
+    root.withdraw()
     file_path = filedialog.askopenfilename(title='Open Calibration file')
+    root.destroy()
 
     filmDoseObj.AddCalibrationFromFile(file_path)
     # Aplica corrección de la calibración
@@ -39,6 +43,7 @@ def main():
     answer = simpledialog.askstring("Input", "Introduce max dose (Gy) for linearization",
                                     parent=application_window)
     filmDoseObj.SaveDoseImage(file_path, np.float(answer))
+    application_window.destroy()
 
     # Salva imagen en valor de pixel pero con todas las correcciones aplicadas
     #file_path = filedialog.asksaveasfilename(title='Save Corrected Pixel Value Image')
