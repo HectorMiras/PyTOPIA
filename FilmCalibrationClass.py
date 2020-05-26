@@ -147,6 +147,7 @@ class FilmCalibration:
             roi = np.array(np.power(10,roiList[i]))
             self.PV[i] = np.mean(65535.0/roi,axis=(0,1))
             self.PVstd_dev[i] = np.std(65535.0/roi,axis=(0,1))
+        application_window.destroy()
         self.Weights = np.power(1.0/OD_std_devs,2)
         self.Weights[:,0] = self.Weights[:,0] / np.sum(self.Weights[:,0])
         self.Weights[:,1] = self.Weights[:,1] / np.sum(self.Weights[:,1])
