@@ -31,7 +31,9 @@ class FilmCalibration:
             try:
                 # Fichero que contiene valores de pixel medios y desviaciones estándar
                 array_txt = np.loadtxt(inputFile,usecols=(0, 2, 4, 6), skiprows=0)
-                self.D = np.loadtxt(inputFile,usecols=(6), skiprows=0)/100
+                self.D = np.loadtxt(inputFile,usecols=(6), skiprows=0)
+                if self.D[-1] > 100:
+                    self.D[:] = self.D[:]/100
                 self.PV = np.loadtxt(inputFile,usecols=(0, 2, 4), skiprows=0)
                 self.ODnet = np.log10(self.PV[0]/self.PV)
                 self.OD0 = np.log10(65535/self.PV[0])
@@ -42,20 +44,20 @@ class FilmCalibration:
                 self.Weights[:,2] = self.Weights[:,2] / np.sum(self.Weights[:,2])
                 
                 #self.OptimizePercolParameters()
-                self.OptimizeDevicParameters()
-                self.show_calibration_plot()
             except:
                 # Fichero solo contiene valores de pixel medios
                 array_txt = np.loadtxt(inputFile,usecols=(0, 1, 2, 3), skiprows=0)
-                self.D = np.loadtxt(inputFile,usecols=(3), skiprows=0)/100
+                self.D = np.loadtxt(inputFile,usecols=(3), skiprows=0)
+                if self.D[-1] > 100:
+                    self.D[:] = self.D[:]/100
                 self.PV = np.loadtxt(inputFile,usecols=(0, 1, 2), skiprows=0)
                 self.ODnet = np.log10(self.PV[0]/self.PV)
                 self.OD0 = np.log10(65535 / self.PV[0])
                 self.Weights = np.full(self.PV.shape,1.0)
                 
                 #self.OptimizePercolParameters()
-                self.OptimizeDevicParameters()
-                self.show_calibration_plot()
+            self.OptimizeDevicParameters()
+            self.show_calibration_plot()
         elif Path(inputFile).suffix in tif_extensions:
             # generate calibration from image
             self.imagefilename = ntpath.basename(inputFile)
@@ -155,7 +157,11 @@ class FilmCalibration:
             # params['n'].vary = False
             # limit parameter values
             params['A'].min = 0
+            params['A'].max = 100
             params['B'].min = 0
+            params['B'].max = 500
+            params['n'].min = 1
+            params['n'].max = 5
             result = fmodel.fit(self.D, params, x=self.ODnet[:, c])
             self.DevicParam_A[c] = result.params['A']
             self.DevicParam_B[c] = result.params['B']
