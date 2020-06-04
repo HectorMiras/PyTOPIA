@@ -277,9 +277,10 @@ class FilmDose:
                 cont2 = 0.0
                 print(f'Multichannel correction process: {np.trunc(100*cont/cont_lim)}%')
             for w in range(od_roi.shape[1]):
-                fittet_params = optimize.minimize(self.optimization_func1,
-                                                  x0=np.array([1.0]),
-                                                  args=(od_roi[h, w, :], self.OD0[:])).x
+                #fittet_params = optimize.minimize(self.optimization_func1,
+                #                                  x0=np.array([1.0]),
+                #                                  args=(od_roi[h, w, :], self.OD0[:])).x
+                fittet_params = self.mi_optimizacion(np.array([1.0]), od_roi[h, w, :],self.OD0[:])
                 if fittet_params[0] > 1.2:
                     fittet_params[0] = 1.2
                 if fittet_params[0] < 0.8:
@@ -295,6 +296,22 @@ class FilmDose:
         im_alpha = Image.fromarray(alpha_image)
         imname = 'MultiChannelMap_' + self.imagefilename
         im_alpha.save(self.workingdir + imname)
+
+    def mi_optimizacion(self, params, od, od0):
+        paso = 0.002
+        #Determina dirección
+        if self.optimization_func1(params+paso, od, od0) > self.optimization_func1(params-paso, od, od0):
+            paso = -1*paso
+        nparams = params
+        f1 = self.optimization_func1(nparams, od, od0)
+        f2 = self.optimization_func1(nparams+paso, od, od0)
+        while f2 < f1:
+            f1 = f2
+            nparams = nparams + paso
+            if abs(nparams[0] - 1.0) > 0.1:
+                break
+            f2 = self.optimization_func1(nparams + paso, od, od0)
+        return nparams
 
     # Función que se optimiza en el método de corrección multicanal1
     def optimization_func1(self, params, od, od0):
