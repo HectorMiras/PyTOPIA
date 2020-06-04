@@ -18,6 +18,7 @@ import os.path as path
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy.ndimage import rotate
+import FilmDoseClass
 
 fichero_dosimetria = "Dosimetria.txt"                       # Fichero con las curvas de calibracion
 modelos_ajuste_ids = ["Polinomial_3Grado" , "Percolacion"]  # Ids para los modelos de ajuste dosis=f(DoN). Sólo tif
@@ -1104,6 +1105,7 @@ class Objeto_Ppal:
         self.pixel = None # Solo en tif
         self.don = None # Solo en tif
         self.dosis = None
+        self.fdo = None  # Film Dose Object. Solo en tif
         
         for i in range(3):
             self.cal[i] = -1
@@ -2136,6 +2138,8 @@ class MainFrame(tk.Tk):
                     self.o1.set_pixel(None)
                 else:                    
                     im = cv2.imread(answer, -1)
+                    self.o1.fdo = FilmDoseClass.FilmDose(answer)
+
                     median_image = cv2.medianBlur(im, 3)
                     self.Mostrar(median_image, 'dust1.png', self.canvas1_ppal, foco, self.ancho_canvas_ppal, self.alto_canvas_ppal, "tif")
                     self.o1.set_tipo('tif')
@@ -2173,6 +2177,7 @@ class MainFrame(tk.Tk):
                     self.o2.set_pixel(None)
                 else:
                     im = cv2.imread(answer, -1)
+                    self.o2.fdo = FilmDoseClass.FilmDose(answer)
                     median_image = cv2.medianBlur(im, 3)
                     self.Mostrar(median_image, 'dust2.png', self.canvas2_ppal, foco, self.ancho_canvas_ppal, self.alto_canvas_ppal, "tif")
                     self.o2.set_tipo('tif')
