@@ -8,6 +8,7 @@ import matplotlib.widgets as widgets
 import tkinter as tk
 from tkinter import simpledialog
 from tkinter import filedialog
+from pynverse import inversefunc
 
 
 class FilmCalibration:
@@ -15,10 +16,12 @@ class FilmCalibration:
     def __init__(self, inputFile=""):
         
         # Parametros iniciales
-        self.PercolParam_n = np.array([0.02, 0.02, 0.02])
-        self.PercolParam_A = np.array([10.0, 10.0, 10.0])
-        self.PercolParam_k = np.array([1.0, 1.0, 1.0])
-        
+        self.PercolParam_n = np.array([3, 3, 3])
+        self.PercolParam_A = np.array([7, 7, 7])
+        self.PercolParam_k = np.array([47, 47, 47])
+        self.DevicParam_A = np.array([7.0, 7.0, 7.0])
+        self.DevicParam_B = np.array([50.0, 50.0, 50.0])
+        self.DevicParam_n = np.array([3.0, 3.0, 3.0])
         self.workingdir = ntpath.dirname(inputFile) + '\\'
         text_extensions = ['.txt', '.dat', '.text']
         tif_extensions = ['.tif', '.tiff']
@@ -38,7 +41,8 @@ class FilmCalibration:
                 self.Weights[:,1] = self.Weights[:,1] / np.sum(self.Weights[:,1])
                 self.Weights[:,2] = self.Weights[:,2] / np.sum(self.Weights[:,2])
                 
-                self.OptimizePercolParameters()
+                #self.OptimizePercolParameters()
+                self.OptimizeDevicParameters()
                 self.show_calibration_plot()
             except:
                 # Fichero solo contiene valores de pixel medios
@@ -46,9 +50,12 @@ class FilmCalibration:
                 self.D = np.loadtxt(inputFile,usecols=(3), skiprows=0)/100
                 self.PV = np.loadtxt(inputFile,usecols=(0, 1, 2), skiprows=0)
                 self.ODnet = np.log10(self.PV[0]/self.PV)
+                self.OD0 = np.log10(65535 / self.PV[0])
                 self.Weights = np.full(self.PV.shape,1.0)
                 
-                self.OptimizePercolParameters()
+                #self.OptimizePercolParameters()
+                self.OptimizeDevicParameters()
+                self.show_calibration_plot()
         elif Path(inputFile).suffix in tif_extensions:
             # generate calibration from image
             self.imagefilename = ntpath.basename(inputFile)
@@ -58,11 +65,19 @@ class FilmCalibration:
             # file with invalid extension
             print("The file has an invalid extension: " + Path(inputFile).suffix)
 
-    def Get_DoseFromODnet(self, x, c):
+    def Get_DoseFromODnet_(self, x, c):
         n = self.PercolParam_n[c]
         A = self.PercolParam_A[c]
         k = self.PercolParam_k[c]
-        return self.PercolCalInv(x, A, k, n)
+        #return self.PercolCalInv(x, A, k, n)
+        return self.DevicCalFunc(x, A, k, n)
+
+    def Get_DoseFromODnet(self, x, c):
+        A = self.DevicParam_A[c]
+        B = self.DevicParam_B[c]
+        n = self.DevicParam_n[c]
+        #return self.PercolCalInv(x, A, k, n)
+        return self.DevicCalFunc(x, A, B, n)
 
     def Get_DerivateFromODnet(self, x, c):
         n = self.PercolParam_n[c]
@@ -70,11 +85,18 @@ class FilmCalibration:
         k = self.PercolParam_k[c]
         return self.PercolCalDerivInv(x, A, k, n)
 
-    def GetODnetFromDose(self, x, c):
+
+    def GetODnetFromDose_(self, x, c):
         n = self.PercolParam_n[c]
         A = self.PercolParam_A[c]
         k = self.PercolParam_k[c]
         return self.PercolCal(x, A, k, n)
+
+    def GetODnetFromDose(self, x, c):
+        n = self.DevicParam_n[c]
+        A = self.DevicParam_A[c]
+        B = self.DevicParam_B[c]
+        return self.DevicInvCalFunc(x, A, B, n)
 
     def PercolCal(self, x, A, k, n):
         # with np.nditer(x, op_flags=['readwrite']) as it:
@@ -94,6 +116,15 @@ class FilmCalibration:
         y = k * (np.power((1 - x / A), (exp - 1)) - 1) / (n * A)
         return y
 
+    def DevicCalFunc(self, x, A, B, n):
+        y = A*x + B*np.power(x, n)
+        return y
+
+    def DevicInvCalFunc(self, y, A, B, n):
+        f = (lambda x: A*x + B*np.power(x, n))
+        od = inversefunc(f, y, domain=[0, 100])
+        return od
+
     def OptimizePercolParameters(self):
         for c in [0, 1, 2]:
             fmodel = Model(self.PercolCal)
@@ -101,7 +132,7 @@ class FilmCalibration:
             # giving initial values
             params = fmodel.make_params(A=self.PercolParam_A[c], k=self.PercolParam_k[c], n=self.PercolParam_n[c])
             # fix n:
-            params['n'].vary = False
+            #params['n'].vary = False
             # limit parameter values
             params['A'].min = 0
             params['k'].min = 0
@@ -109,6 +140,26 @@ class FilmCalibration:
             self.PercolParam_A[c] = result.params['A']
             self.PercolParam_k[c] = result.params['k']
             self.PercolParam_n[c] = result.params['n']
+            print("Fit results for channel {}:".format(c))
+            # result.plot_fit()
+            print(result.fit_report())
+            print('')
+
+    def OptimizeDevicParameters(self):
+        for c in [0, 1, 2]:
+            fmodel = Model(self.DevicCalFunc)
+            # create parameters -- these are named from the function arguments --
+            # giving initial values
+            params = fmodel.make_params(A=self.DevicParam_A[c], B=self.DevicParam_B[c], n=self.DevicParam_n[c])
+            # fix n:
+            # params['n'].vary = False
+            # limit parameter values
+            params['A'].min = 0
+            params['B'].min = 0
+            result = fmodel.fit(self.D, params, x=self.ODnet[:, c])
+            self.DevicParam_A[c] = result.params['A']
+            self.DevicParam_B[c] = result.params['B']
+            self.DevicParam_n[c] = result.params['n']
             print("Fit results for channel {}:".format(c))
             # result.plot_fit()
             print(result.fit_report())
@@ -152,7 +203,8 @@ class FilmCalibration:
         self.Weights[:,0] = self.Weights[:,0] / np.sum(self.Weights[:,0])
         self.Weights[:,1] = self.Weights[:,1] / np.sum(self.Weights[:,1])
         self.Weights[:,2] = self.Weights[:,2] / np.sum(self.Weights[:,2])
-        self.OptimizePercolParameters()
+        #self.OptimizePercolParameters()
+        self.OptimizeDevicParameters()
         self.show_calibration_plot()
 
     def save_calibration_text_file(self,calibrationfile):

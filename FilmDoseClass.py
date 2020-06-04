@@ -299,6 +299,9 @@ class FilmDose:
     # Función que se optimiza en el método de corrección multicanal1
     def optimization_func1(self, params, od, od0):
         nod = od*params[0]-od0
+        for c in [0, 1, 2]:
+            if nod[c] < 0.0:
+                return 10000.0
         dr = self.Calibration.Get_DoseFromODnet(nod[0], 0)
         dg = self.Calibration.Get_DoseFromODnet(nod[1], 1)
         db = self.Calibration.Get_DoseFromODnet(nod[2], 2)
@@ -328,8 +331,8 @@ class FilmDose:
                 cont2 = 0.0
                 print(f'Multichannel correction process: {np.trunc(100*cont/cont_lim)}%')
             for w in range(nod_roi.shape[1]):
-                fittet_params = optimize.minimize(self.optimization_func2b,
-                                                  x0=np.array([0.0, 0.0, 1.0, 1.0]),
+                fittet_params = optimize.minimize(self.optimization_func2a,
+                                                  x0=np.array([0.01, 0.01]),
                                                   args=nod_roi[h, w, :]).x
                 if fittet_params[0] > 0.2:
                     fittet_params[0] = 0.2
@@ -375,9 +378,11 @@ class FilmDose:
         delta_d = np.array([self.Calibration.Get_DerivateFromODnet(nod[c], c) for c in [0, 1, 2]])
         delta_d = delta_d*(params[0]*odnet + params[1]*self.OD0)/(1 + params[0])
         f = 0.0
+        unc = np.array([1.0, 1.0, 10.0])
         for c in [0, 1, 2]:
-            f = f + np.power(d[c] + delta_d[c] - dk[c], 2)
-        f = f + params[2]*(d[0]-d[1]) + params[3]*(d[0]-d[2])
+            f = f + np.power(d[c] + delta_d[c] - dk[c], 2)/unc[c]
+        #f = f + 0.001*np.power(params[0], 2) + 0.001*np.power(params[1], 2)
+        f = f + np.power(d[0]-d[1], 2) + 0.1*np.power(d[0]-d[2], 2)
         return f
         
 
