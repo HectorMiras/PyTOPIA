@@ -2178,8 +2178,11 @@ class MainFrame(tk.Tk):
                 else:
                     im = cv2.imread(answer, -1)
                     self.o2.fdo = FilmDoseClass.FilmDose(answer)
+                    self.o2.fdo.AddCalibrationFromFile('_')
                     median_image = cv2.medianBlur(im, 3)
-                    self.Mostrar(median_image, 'dust2.png', self.canvas2_ppal, foco, self.ancho_canvas_ppal, self.alto_canvas_ppal, "tif")
+                    self.Mostrar2(self.o2.fdo.get_nod(), self.canvas2_ppal, foco, self.ancho_canvas_ppal,
+                                  self.alto_canvas_ppal, "tif")
+                    #self.Mostrar(median_image, 'dust2.png', self.canvas2_ppal, foco, self.ancho_canvas_ppal, self.alto_canvas_ppal, "tif")
                     self.o2.set_tipo('tif')
                     height, width = im.shape[:2]
                     self.o2.set_height(height)
@@ -3130,6 +3133,21 @@ class MainFrame(tk.Tk):
             
     # Funcion para representar en el canvas directamente una matriz3D formato imagen, con el canal en la
     # tercera dimension. 
+    def Mostrar2(self, matriz_imagen, canvas, foco, ancho_canvas, alto_canvas, tipo):
+        max = np.max(matriz_imagen)
+        #if max > 0:
+        matriz_imagen = matriz_imagen*255/max
+        matriz_imagen = matriz_imagen.astype(np.uint8)
+        img = Image.fromarray(matriz_imagen)
+        img = img.resize((ancho_canvas, alto_canvas), Image.ANTIALIAS)
+        if foco == 1:
+            self.img1 = ImageTk.PhotoImage(img)
+            canvas_img = canvas.create_image(0, 0, anchor="nw", image=self.img1)
+        if foco == 2:
+            self.img2 = ImageTk.PhotoImage(img)
+            canvas_img = canvas.create_image(0, 0, anchor="nw", image=self.img2)
+
+
     def Mostrar(self, matriz3D_im, fichero_imagen, canvas, foco, ancho_canvas, alto_canvas, tipo):
         if foco ==1:
             maximo = np.amax(matriz3D_im)
