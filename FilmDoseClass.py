@@ -61,6 +61,11 @@ class FilmDose:
         
     def get_ImageRGB_24bits(self):
         return self.PILImage
+
+    def get_nod(self):
+        nod = self.OD-self.OD0
+        nod[nod < 0] = 0.0
+        return nod
     
     def show_Image(self):
         fig = plt.figure()
@@ -68,18 +73,23 @@ class FilmDose:
         plt.show()
     
     def show_DoseImage(self, dmax):
-        arr = (self.DoseArrays()*256/dmax).astype(np.uint8)
-        with np.nditer(arr, op_flags=['readwrite']) as it:
-            for d in it:
-                if d>256:
-                    d[...] = 256
         fig = plt.figure()
-        plt_image = plt.imshow(arr)
+        plt_image = plt.imshow(self.generate_DoseImage(dmax))
         plt.show()
+
+    def generate_DoseImage(self, dmax):
+        arr = (self.DoseArrays()*256/dmax)
+        arr[arr > 255] = 255
+        arr = arr.astype(np.uint8)
+        return arr
     
     # Carga una curva de calibración desde un fichero
     def AddCalibrationFromFile(self, inputfile):
-        self.Calibration = FilmCalibrationClass.FilmCalibration(inputfile)
+        root = tk.Tk()
+        root.withdraw()
+        file_path = filedialog.askopenfilename(title='Open Calibration file')
+        root.destroy()
+        self.Calibration = FilmCalibrationClass.FilmCalibration(file_path)
         self.OD0 = self.Calibration.OD0
         
     # Función que permite seleccionar una ROI rectangular en la imagen.
@@ -156,19 +166,14 @@ class FilmDose:
         darray = np.zeros(self.OD.shape, dtype=np.float)
         for c in [0, 1, 2]:
             darray[:, :, c] = self.Calibration.Get_DoseFromODnet((self.OD[:, :, c]-self.OD0[c]), c)
-        with np.nditer(darray, op_flags=['readwrite']) as it:
-            for d in it:
-                if d < 0:
-                    d[...] = 0
+        # Se permiten dosis hasta un 20% superiores al máximo de la curva de calibración
+        darray[darray > 1.2*np.max(self.Calibration.D)] = 1.2*np.max(self.Calibration.D)
         return darray
     
     # Guarda la imagen en formato tiff 48-bits con valor de pixel lineal con la dosis
     def SaveDoseImage(self, outputfile, Dmax):
         arr = (self.DoseArrays()*65535/Dmax)
-        with np.nditer(arr, op_flags=['readwrite']) as it:
-            for d in it:
-                if d > 65535:
-                    d[...] = 65535
+        arr[arr > 65535] = 65535
         darray = arr.astype(np.uint16)
         tifffile.imwrite(outputfile, darray, resolution=(self.dpi[0], self.dpi[1]))
 
@@ -316,9 +321,9 @@ class FilmDose:
     # Función que se optimiza en el método de corrección multicanal1
     def optimization_func1(self, params, od, od0):
         nod = od*params[0]-od0
-        for c in [0, 1, 2]:
-            if nod[c] < 0.0:
-                return 10000.0
+        nod[nod < 0] = 0.0
+        if (1-params[0]) > 0.2:
+            return 10000.0
         dr = self.Calibration.Get_DoseFromODnet(nod[0], 0)
         dg = self.Calibration.Get_DoseFromODnet(nod[1], 1)
         db = self.Calibration.Get_DoseFromODnet(nod[2], 2)

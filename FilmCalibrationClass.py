@@ -75,6 +75,11 @@ class FilmCalibration:
         return self.DevicCalFunc(x, A, k, n)
 
     def Get_DoseFromODnet(self, x, c):
+        if isinstance(x, (list, np.ndarray)):
+            x[x < 0] = 0.0
+        else:
+            if x < 0:
+                x = 0.0
         A = self.DevicParam_A[c]
         B = self.DevicParam_B[c]
         n = self.DevicParam_n[c]
@@ -120,6 +125,11 @@ class FilmCalibration:
 
     def DevicCalFunc(self, x, A, B, n):
         y = A*x + B*np.power(x, n)
+        if isinstance(y, (list, np.ndarray)):
+            y[y < 0] = 0.0
+        else:
+            if y < 0:
+                y = 0.0
         return y
 
     def DevicInvCalFunc(self, y, A, B, n):
@@ -238,7 +248,7 @@ class FilmCalibration:
         x = np.arange(0,np.max(self.ODnet[:,2]*1.1),0.01)
         y = self.Get_DoseFromODnet(x,2)
         plt.plot(x,y)
-        plt.show(block=True)
+        plt.show(block=False)
 
 
 
