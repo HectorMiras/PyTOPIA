@@ -39,6 +39,10 @@ class FilmDose:
         self.Dref = np.empty(3)
         self.CalibrationCorrectionFactors = np.array([1.0, 1.0, 1.0])
         
+    def set_od_from_imagearray(self, imarr):
+        self.imagearray = np.array(imarr)
+        self.OD = np.log10(65535.0 / self.imagearray)
+        self.ROI = np.array(1)
 
     
     def get_pixelheight(self):
@@ -47,7 +51,7 @@ class FilmDose:
     def get_pixelwidth(self):
         return self.pixelsize[1]
        
-    def set_pixelsize(self,ps):
+    def set_pixelsize(self, ps):
         self.pixelsize[0] = ps
         self.pixelsize[1] = ps
         self.dpi = 25.4 / self.pixelsize
@@ -83,6 +87,16 @@ class FilmDose:
         arr = arr.astype(np.uint8)
         return arr
     
+    def add_calibration_objects(self, fcalobj):
+        self.Calibration = fcalobj
+        self.OD0 = self.Calibration.OD0
+
+    def add_calibration(self, pv, d, pv_std_dev=None):
+        fcalobj = FilmCalibrationClass.FilmCalibration()
+        fcalobj.calibration_from_arrays(pv, d, pv_std_dev)
+        self.Calibration = fcalobj
+        self.OD0 = self.Calibration.OD0
+
     # Carga una curva de calibración desde un fichero
     def AddCalibrationFromFile(self, inputfile):
         root = tk.Tk()
@@ -101,9 +115,7 @@ class FilmDose:
         rs = widgets.RectangleSelector(
             ax, self.__onselect, drawtype='box',
             rectprops=dict(facecolor='red', edgecolor='black', alpha=0.2, fill=True))
-        #plt.pause(5)
-        plt.show(block=True)  # Me bloquea el programa aunque cierre la ventana
-        #plt.show()
+        plt.show(block=True)
         x = [np.int(rs.corners[0][0]), np.int(rs.corners[0][2])]
         y = [np.int(rs.corners[1][0]), np.int(rs.corners[1][2])]
         rect = np.array([x, y])
@@ -130,7 +142,7 @@ class FilmDose:
         x = [np.int(rs.corners[0][0]), np.int(rs.corners[0][2])]
         y = [np.int(rs.corners[1][0]), np.int(rs.corners[1][2])]
         self.ROI = self.OD[y[0]:(y[1]+1), x[0]:(x[1]+1), 0:3]
-        self.OD0 = np.mean(self.ROI, axis=(0, 1))
+        od0 = np.mean(self.ROI, axis=(0, 1))
 
         # Pide seleccionar el recorte irradiado a dosis conocida de referencia
         ctypes.windll.user32.MessageBoxW(0, "Select irradiated ROI", "", 0)
@@ -140,26 +152,34 @@ class FilmDose:
         #self.ROI = self.imagearray[y[0]:(y[1]+1),x[0]:(x[1]+1),0:3]
         #self.ODref = np.mean(np.log10(65535/self.ROI),axis=(0,1))
         self.ROI = self.OD[y[0]:(y[1]+1),x[0]:(x[1]+1),0:3]
-        self.ODref = np.mean(self.ROI,axis=(0,1))
+        odref = np.mean(self.ROI,axis=(0,1))
 
         # Solicita el valor de la dosis de referencia
+        dref = np.empty(3)
         application_window = tk.Tk()
         application_window.withdraw()
         answer = simpledialog.askstring("Input", "Introduce de reference dose (Gy)",
                                         parent=application_window)
-        self.Dref.fill(np.float(answer))
+        dref.fill(np.float(answer))
         application_window.destroy()
         # Calcula la ODnet que corresponde a la dosis de referencia usando la curva de calibración.
-        ODnetRefCal = np.array([0.0,0.0,0.0])
-        for c in np.array([0,1,2]): 
-            ODnetRefCal[c] = self.Calibration.GetODnetFromDose(self.Dref[c],c)
+        self.calculate_calibration_correction_factors(od0, odref, dref)
+        return True
+
+    def calculate_calibration_correction_factors(self, od0, odref, dref):
+        # Calcula la ODnet que corresponde a la dosis de referencia usando la curva de calibración.
+        self.Dref = dref
+        self.OD0 = od0
+        self.ODref = odref
+        ODnetRefCal = np.array([0.0, 0.0, 0.0])
+        for c in np.array([0, 1, 2]):
+            ODnetRefCal[c] = self.Calibration.GetODnetFromDose(self.Dref[c], c)
 
         # Calcula el factor de corrección de dosis
-        self.CalibrationCorrectionFactors = ODnetRefCal/(self.ODref-self.OD0)
+        self.CalibrationCorrectionFactors = ODnetRefCal / (self.ODref - self.OD0)
         # Aplica el factor de corrección. Llevamos la película a las condiciones de la calibración
-        self.OD = self.Calibration.OD0 + (self.OD-self.OD0)*self.CalibrationCorrectionFactors
+        self.OD = self.Calibration.OD0 + (self.OD - self.OD0) * self.CalibrationCorrectionFactors
         self.OD0 = self.Calibration.OD0
-        return True
 
     # Genera la matriz de dosis a partir de la matriz de densidad óptica y la calibración
     def DoseArrays(self):
