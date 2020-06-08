@@ -9,12 +9,13 @@ def main():
     appwindow.destroy()
     if(file_path != ''):
         filmCal_obj = FilmCalibrationClass.FilmCalibration(file_path)
-        appwindow = tk.Tk()
-        appwindow.withdraw()
-        file_path = filedialog.asksaveasfilename(title='Save calibration file')
-        if len(file_path) > 0:
-            filmCal_obj.save_calibration_text_file(file_path)
-        appwindow.destroy()
+        if(filmCal_obj.imagefilename is not None):
+            appwindow = tk.Tk()
+            appwindow.withdraw()
+            file_path = filedialog.asksaveasfilename(title='Save calibration file')
+            if len(file_path) > 0:
+                filmCal_obj.save_calibration_text_file(file_path)
+            appwindow.destroy()
     print('End')
 
 

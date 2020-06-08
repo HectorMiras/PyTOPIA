@@ -13,7 +13,7 @@ from pynverse import inversefunc
 
 class FilmCalibration:
     
-    def __init__(self, inputFile=""):
+    def __init__(self, inputFile=None):
         
         # Parametros iniciales
         self.PercolParam_n = np.array([3, 3, 3])
@@ -22,28 +22,43 @@ class FilmCalibration:
         self.DevicParam_A = np.array([7.0, 7.0, 7.0])
         self.DevicParam_B = np.array([50.0, 50.0, 50.0])
         self.DevicParam_n = np.array([3.0, 3.0, 3.0])
-        self.workingdir = ntpath.dirname(inputFile) + '\\'
+        self.PV = None
+        self.OD0 = None
+        self.ODnet = None
+        self.PVstd_dev = None
+        self.Weights = None
+        self.imagefilename = None
+
+        if inputFile is not None:
+            self.workingdir = ntpath.dirname(inputFile) + '\\'
+            text_extensions = ['.txt', '.dat', '.text']
+            tif_extensions = ['.tif', '.tiff']
+            if Path(inputFile).suffix in text_extensions:
+                # open calibration from text file
+                self.calibration_from_text_file(inputFile)
+            elif Path(inputFile).suffix in tif_extensions:
+                # generate calibration from image
+                self.calibration_from_image(inputFile)
+                print('Generate Calibration from image')
+            else:
+                # file with invalid extension
+                print("The file has an invalid extension: " + Path(inputFile).suffix)
+
+    def calibration_from_text_file(self, inputFile):
         text_extensions = ['.txt', '.dat', '.text']
-        tif_extensions = ['.tif', '.tiff']
         if Path(inputFile).suffix in text_extensions:
             # open calibration from text file
             self.textfilename = ntpath.basename(inputFile)
             try:
                 # Fichero que contiene valores de pixel medios y desviaciones estándar
-                array_txt = np.loadtxt(inputFile,usecols=(0, 2, 4, 6), skiprows=0)
-                self.D = np.loadtxt(inputFile,usecols=(6), skiprows=0)
+                array_txt = np.loadtxt(inputFile, usecols=(0, 2, 4, 6), skiprows=0)
+                self.D = np.loadtxt(inputFile, usecols=(6), skiprows=0)
                 if self.D[-1] > 100:
                     self.D[:] = self.D[:]/100
-                self.PV = np.loadtxt(inputFile,usecols=(0, 2, 4), skiprows=0)
-                self.ODnet = np.log10(self.PV[0]/self.PV)
-                self.OD0 = np.log10(65535/self.PV[0])
-                self.PVstd_dev = np.loadtxt(inputFile,usecols=(1, 3, 5), skiprows=0)
-                self.Weights = np.power(1.0/np.log10(self.PV[0]/self.PVstd_dev),2)
-                self.Weights[:,0] = self.Weights[:,0] / np.sum(self.Weights[:,0])
-                self.Weights[:,1] = self.Weights[:,1] / np.sum(self.Weights[:,1])
-                self.Weights[:,2] = self.Weights[:,2] / np.sum(self.Weights[:,2])
-                
-                #self.OptimizePercolParameters()
+                self.PV = np.loadtxt(inputFile, usecols=(0, 2, 4), skiprows=0)
+                self.PVstd_dev = np.loadtxt(inputFile, usecols=(1, 3, 5), skiprows=0)
+                self.obtain_ODvalues_from_PV()
+
             except:
                 # Fichero solo contiene valores de pixel medios
                 array_txt = np.loadtxt(inputFile,usecols=(0, 1, 2, 3), skiprows=0)
@@ -51,14 +66,16 @@ class FilmCalibration:
                 if self.D[-1] > 100:
                     self.D[:] = self.D[:]/100
                 self.PV = np.loadtxt(inputFile,usecols=(0, 1, 2), skiprows=0)
-                self.ODnet = np.log10(self.PV[0]/self.PV)
-                self.OD0 = np.log10(65535 / self.PV[0])
-                self.Weights = np.full(self.PV.shape,1.0)
-                
-                #self.OptimizePercolParameters()
+                self.obtain_ODvalues_from_PV()
             self.OptimizeDevicParameters()
-            self.show_calibration_plot()
-        elif Path(inputFile).suffix in tif_extensions:
+        else:
+            # file with invalid extension
+            print("The file has an invalid extension: " + Path(inputFile).suffix)
+
+    def calibration_from_image(self, inputFile):
+        tif_extensions = ['.tif', '.tiff']
+        self.workingdir = ntpath.dirname(inputFile) + '\\'
+        if Path(inputFile).suffix in tif_extensions:
             # generate calibration from image
             self.imagefilename = ntpath.basename(inputFile)
             self.generate_calibration_from_image()
@@ -66,6 +83,25 @@ class FilmCalibration:
         else:
             # file with invalid extension
             print("The file has an invalid extension: " + Path(inputFile).suffix)
+
+    def calibration_from_arrays(self, pv_array, dose_array, pv_std_dev_array=None):
+        self.PV = pv_array
+        self.D = dose_array
+        if pv_std_dev_array is not None:
+            self.PVstd_dev = pv_std_dev_array
+        self.obtain_ODvalues_from_PV()
+        self.OptimizeDevicParameters()
+
+    def obtain_ODvalues_from_PV(self):
+        self.ODnet = np.log10(self.PV[0] / self.PV)
+        self.OD0 = np.log10(65535 / self.PV[0])
+        if self.PVstd_dev is not None:
+            self.Weights = np.power(1.0 / np.log10(self.PV[0] / self.PVstd_dev), 2)
+            self.Weights[:, 0] = self.Weights[:, 0] / np.sum(self.Weights[:, 0])
+            self.Weights[:, 1] = self.Weights[:, 1] / np.sum(self.Weights[:, 1])
+            self.Weights[:, 2] = self.Weights[:, 2] / np.sum(self.Weights[:, 2])
+        else:
+            self.Weights = np.full(self.PV.shape, 1.0)
 
     def Get_DoseFromODnet_(self, x, c):
         n = self.PercolParam_n[c]
@@ -180,6 +216,7 @@ class FilmCalibration:
             # result.plot_fit()
             print(result.fit_report())
             print('')
+        self.show_calibration_plot()
     
     def generate_calibration_from_image(self):
         doseList = []
@@ -248,7 +285,7 @@ class FilmCalibration:
         x = np.arange(0,np.max(self.ODnet[:,2]*1.1),0.01)
         y = self.Get_DoseFromODnet(x,2)
         plt.plot(x,y)
-        plt.show(block=False)
+        plt.show(block=True)
 
 
 
