@@ -38,13 +38,47 @@ class FilmDose:
         self.ROI = np.array(1)
         self.Dref = np.empty(3)
         self.CalibrationCorrectionFactors = np.array([1.0, 1.0, 1.0])
-        
+
+    def get_don(self):
+        nod = np.clip(self.OD - self.OD0, 0.0)
+        return nod
+
+    def set_don(self, don):
+        self.OD = don + self.OD0
+        self.set_imagearray_from_od(self.OD)
+
+    def get_do(self):
+        return self.OD
+
+    def set_do(self, do):
+        self.OD = do
+        self.set_imagearray_from_od(do)
+
+    def get_dose(self):
+        darray = np.zeros(self.OD.shape, dtype=np.float)
+        #for c in [0, 1, 2]:
+        #    darray[:, :, c] = self.Calibration.get_dose_from_nod((self.OD[:, :, c] - self.OD0[c]), c)
+        darray = self.Calibration.get_dose_from_nod((self.OD - self.OD0))
+        # Se permiten dosis hasta un 20% superiores al máximo de la curva de calibración
+        darray = np.clip(darray, 0, 1.2 * np.max(self.Calibration.D))
+        return darray
+
+    def get_pixel(self):
+        return self.imagearray
+
+    def set_pixel(self, pixel):
+        self.imagearray = pixel
+        self.set_od_from_imagearray(pixel)
+
+
     def set_od_from_imagearray(self, imarr):
         self.imagearray = np.array(imarr)
         self.OD = np.log10(65535.0 / self.imagearray)
         self.ROI = np.array(1)
 
-    
+    def set_imagearray_from_od(self, od):
+        self.imagearray = np.clip(65535.0 / np.power(10, self.OD), 0, 65535).astype(np.uint16)
+
     def get_pixelheight(self):
         return self.pixelsize[0]
     
@@ -62,15 +96,28 @@ class FilmDose:
     def set_pixelwidth(self,pw):
         self.pixelsize[1] = pw   
         self.dpi[1] = 25.4 / self.pixelsize[1]
-        
-    def get_ImageRGB_24bits(self):
-        return self.PILImage
 
-    def get_nod(self):
-        nod = self.OD-self.OD0
-        nod[nod < 0] = 0.0
-        return nod
-    
+    # Genera la matriz de dosis a partir de la matriz de densidad óptica y la calibración
+    def DoseArrays(self):
+        darray = np.zeros(self.OD.shape, dtype=np.float)
+        for c in [0, 1, 2]:
+            darray[:, :, c] = self.Calibration.get_dose_from_nod((self.OD[:, :, c] - self.OD0[c]), c)
+        # Se permiten dosis hasta un 20% superiores al máximo de la curva de calibración
+        darray = np.clip(darray, 0, 1.2 * np.max(self.Calibration.D))
+        return darray
+
+    # Guarda la imagen en formato tiff 48-bits con valor de pixel lineal con la dosis
+    def SaveDoseImage(self, outputfile, Dmax):
+        arr = (self.DoseArrays() * 65535 / Dmax)
+        arr[arr > 65535] = 65535
+        darray = arr.astype(np.uint16)
+        tifffile.imwrite(outputfile, darray, resolution=(self.dpi[0], self.dpi[1]))
+
+    # Guarda la imagen corregida en Tiff 48-bits
+    def SaveCorrectedPVImage(self, outputfile):
+        PV = (65535.0 / np.power(10, self.OD)).astype(np.uint16)
+        tifffile.imwrite(outputfile, PV, resolution=(self.dpi[0], self.dpi[1]))
+
     def show_Image(self):
         fig = plt.figure()
         plt_image = plt.imshow(self.PILImage)
@@ -82,9 +129,7 @@ class FilmDose:
         plt.show()
 
     def generate_DoseImage(self, dmax):
-        arr = (self.DoseArrays()*256/dmax)
-        arr[arr > 255] = 255
-        arr = arr.astype(np.uint8)
+        arr = np.clip(self.DoseArrays()*256/dmax,0,255).astype(np.uint8)
         return arr
     
     def add_calibration_objects(self, fcalobj):
@@ -99,11 +144,11 @@ class FilmDose:
 
     # Carga una curva de calibración desde un fichero
     def AddCalibrationFromFile(self, inputfile):
-        root = tk.Tk()
-        root.withdraw()
-        file_path = filedialog.askopenfilename(title='Open Calibration file')
-        root.destroy()
-        self.Calibration = FilmCalibrationClass.FilmCalibration(file_path)
+        #root = tk.Tk()
+        #root.withdraw()
+        #file_path = filedialog.askopenfilename(title='Open Calibration file')
+        #root.destroy()
+        self.Calibration = FilmCalibrationClass.FilmCalibration(inputfile)
         self.OD0 = self.Calibration.OD0
         
     # Función que permite seleccionar una ROI rectangular en la imagen.
@@ -181,27 +226,6 @@ class FilmDose:
         self.OD = self.Calibration.OD0 + (self.OD - self.OD0) * self.CalibrationCorrectionFactors
         self.OD0 = self.Calibration.OD0
 
-    # Genera la matriz de dosis a partir de la matriz de densidad óptica y la calibración
-    def DoseArrays(self):
-        darray = np.zeros(self.OD.shape, dtype=np.float)
-        for c in [0, 1, 2]:
-            darray[:, :, c] = self.Calibration.Get_DoseFromODnet((self.OD[:, :, c]-self.OD0[c]), c)
-        # Se permiten dosis hasta un 20% superiores al máximo de la curva de calibración
-        darray[darray > 1.2*np.max(self.Calibration.D)] = 1.2*np.max(self.Calibration.D)
-        return darray
-    
-    # Guarda la imagen en formato tiff 48-bits con valor de pixel lineal con la dosis
-    def SaveDoseImage(self, outputfile, Dmax):
-        arr = (self.DoseArrays()*65535/Dmax)
-        arr[arr > 65535] = 65535
-        darray = arr.astype(np.uint16)
-        tifffile.imwrite(outputfile, darray, resolution=(self.dpi[0], self.dpi[1]))
-
-    # Guarda la imagen corregida en Tiff 48-bits
-    def SaveCorrectedPVImage(self,outputfile):
-        PV = (65535.0/np.power(10,self.OD)).astype(np.uint16)
-        tifffile.imwrite(outputfile, PV, resolution=(self.dpi[0], self.dpi[1]))
-        
     # Carga los ficheros con los polinomios de corrección de flatscanner y genera una lista con los coeficientes
     # Se carga un fichero por cada nivel de dosis, en orden creciente con la dosis.
     def LoadFlatScanCorrFiles(self):
@@ -232,19 +256,19 @@ class FilmDose:
         coeffarray=np.ones([len(self.FlatScanCoeffList),
                             self.FlatScanCoeffList[0].shape[0], 3])
         # Pasa la lista de coeficientes a un array
-        for i in range(coeffarray.shape[0]):
-            for j in range(coeffarray.shape[1]):
-                for c in range(3):
+        for i in np.arange(coeffarray.shape[0]):
+            for j in np.arange(coeffarray.shape[1]):
+                for c in np.arange(3):
                     coeffarray[i, j, c] = self.FlatScanCoeffList[i][j, c]
         # Inicializa el array que va a contener los factores de corrección para cada píxel
         farray = np.ones([nlevels, self.imagearray.shape[0], 3])
-        for h in range(self.imagearray.shape[0]):
+        for h in np.arange(self.imagearray.shape[0]):
             ypos = h*self.pixelsize[0]
-            for c in [0,1,2]: 
-                for nl in range(nlevels):
+            for c in np.arange(3):
+                for nl in np.arange(nlevels):
                     # Factores de corrección para cada nivel de dosis
                     farray[nl,h,c] = np.polyval(coeffarray[nl,:,c],ypos)             
-                for w in range(self.imagearray.shape[1]):
+                for w in np.arange(self.imagearray.shape[1]):
                     # En cada pixel, interpola para obtener el factor de corrección correspondiente a su
                     # densidad optica
                     fcorr = self.__computeFScorrfactor(self.OD[h, w, c],
@@ -265,7 +289,7 @@ class FilmDose:
         index = 0
         fcorr = 1.0
         nlevels = farr.shape[0]
-        for i in range(nlevels):
+        for i in np.arange(nlevels):
             odUnif = farr[i]
             if od > odUnif:
                 index = i
@@ -297,11 +321,11 @@ class FilmDose:
         cont = 0.0
         cont2 = 0.0
         cont_lim = od_roi.shape[0]*od_roi.shape[1]*od_roi.shape[2]
-        for h in range(od_roi.shape[0]):
+        for h in np.arange(od_roi.shape[0]):
             if cont2/cont_lim > 0.05:
                 cont2 = 0.0
                 print(f'Multichannel correction process: {np.trunc(100*cont/cont_lim)}%')
-            for w in range(od_roi.shape[1]):
+            for w in np.arange(od_roi.shape[1]):
                 #fittet_params = optimize.minimize(self.optimization_func1,
                 #                                  x0=np.array([1.0]),
                 #                                  args=(od_roi[h, w, :], self.OD0[:])).x
@@ -311,7 +335,7 @@ class FilmDose:
                 if fittet_params[0] < 0.8:
                     fittet_params[0] = 0.8
                 self.alpha[h + y[0], w + x[0]] = fittet_params[0]
-                for c in [0, 1, 2]:
+                for c in np.arange(3):
                     od = od_roi[h, w, c]*fittet_params[0]
                     self.OD[h + y[0], w + x[0], c] = od
                     cont = cont + 1.0
@@ -344,9 +368,7 @@ class FilmDose:
         nod[nod < 0] = 0.0
         if (1-params[0]) > 0.2:
             return 10000.0
-        dr = self.Calibration.Get_DoseFromODnet(nod[0], 0)
-        dg = self.Calibration.Get_DoseFromODnet(nod[1], 1)
-        db = self.Calibration.Get_DoseFromODnet(nod[2], 2)
+        dr, dg, db = self.Calibration.get_dose_from_nod(nod)
         f = 3*np.power(dr - dg, 2) + np.power(dr - db, 2) + np.power(dg - db, 2)
         return f
 
@@ -406,17 +428,17 @@ class FilmDose:
     def optimization_func2a(self, params, odnet):
 
         nod = (odnet - params[1] * self.OD0)/(1 + params[0])
-        dr = self.Calibration.Get_DoseFromODnet(nod[0], 0)
-        dg = self.Calibration.Get_DoseFromODnet(nod[1], 1)
-        db = self.Calibration.Get_DoseFromODnet(nod[2], 2)
+        dr = self.Calibration.get_dose_from_nod(nod[0], 0)
+        dg = self.Calibration.get_dose_from_nod(nod[1], 1)
+        db = self.Calibration.get_dose_from_nod(nod[2], 2)
         f = np.power(dr - dg, 2) + np.power(dr - db, 2) + np.power(params[0], 2) + np.power(params[1], 2)
         return f
 
     def optimization_func2b(self, params, odnet):
 
         nod = (odnet - params[1] * self.OD0)/(1 + params[0])
-        dk = np.array([self.Calibration.Get_DoseFromODnet(odnet[c], c) for c in [0, 1, 2]])
-        d = np.array([self.Calibration.Get_DoseFromODnet(nod[c], c) for c in [0, 1, 2]])
+        dk = np.array([self.Calibration.get_dose_from_nod(odnet[c], c) for c in [0, 1, 2]])
+        d = np.array([self.Calibration.get_dose_from_nod(nod[c], c) for c in [0, 1, 2]])
         delta_d = np.array([self.Calibration.Get_DerivateFromODnet(nod[c], c) for c in [0, 1, 2]])
         delta_d = delta_d*(params[0]*odnet + params[1]*self.OD0)/(1 + params[0])
         f = 0.0

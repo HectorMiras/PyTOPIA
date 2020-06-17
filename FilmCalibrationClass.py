@@ -103,24 +103,48 @@ class FilmCalibration:
         else:
             self.Weights = np.full(self.PV.shape, 1.0)
 
-    def Get_DoseFromODnet_(self, x, c):
+    def get_dose_from_nod_Percol(self, x, c):
         n = self.PercolParam_n[c]
         A = self.PercolParam_A[c]
         k = self.PercolParam_k[c]
-        #return self.PercolCalInv(x, A, k, n)
-        return self.DevicCalFunc(x, A, k, n)
+        return self.PercolCalInv(x, A, k, n)
 
-    def Get_DoseFromODnet(self, x, c):
-        if isinstance(x, (list, np.ndarray)):
-            x[x < 0] = 0.0
+    def get_dose_from_nod(self, x, c=None):
+        A = self.DevicParam_A
+        B = self.DevicParam_B
+        n = self.DevicParam_n
+        dim = x.ndim
+        x = np.clip(x, 0, None)
+        dose_arr = np.array(0.0)
+        if dim == 3:
+            if c is None:
+                dose_arr = np.array([self.DevicCalFunc(x[:, :, c], A[c], B[c], n[c]) for c in np.arange(3)])
+                dose_arr = dose_arr.swapaxes(0, 1).swapaxes(1, 2)
+            else:
+                dose_arr = self.DevicCalFunc(x, A[c], B[c], n[c])
         else:
-            if x < 0:
-                x = 0.0
-        A = self.DevicParam_A[c]
-        B = self.DevicParam_B[c]
-        n = self.DevicParam_n[c]
-        #return self.PercolCalInv(x, A, k, n)
-        return self.DevicCalFunc(x, A, B, n)
+            if c is None:
+                dose_arr = np.array([self.DevicCalFunc(x[c], A[c], B[c], n[c]) for c in np.arange(3)])
+            else:
+                dose_arr = self.DevicCalFunc(x, A[c], B[c], n[c])
+
+        return dose_arr
+
+    def get_nod_from_dose(self, x, ch=None):
+        A = self.DevicParam_A
+        B = self.DevicParam_B
+        n = self.DevicParam_n
+        dim = x.ndim
+        x = np.clip(x, 0, None)
+        nod = np.array(0.0)
+        if ch is None:
+            nod = np.array([self.DevicInvCalFunc(x, A[c], B[c], n[c]) for c in np.arange(3)])
+            if nod.ndim == 3:
+                nod = nod.swapaxes(0, 1).swapaxes(1, 2)
+        else:
+            nod = self.DevicInvCalFunc(x, A[ch], B[ch], n[ch])
+
+        return nod
 
     def Get_DerivateFromODnet(self, x, c):
         n = self.PercolParam_n[c]
@@ -129,7 +153,7 @@ class FilmCalibration:
         return self.PercolCalDerivInv(x, A, k, n)
 
 
-    def GetODnetFromDose_(self, x, c):
+    def GetODnetFromDose_Percol(self, x, c):
         n = self.PercolParam_n[c]
         A = self.PercolParam_A[c]
         k = self.PercolParam_k[c]
@@ -223,14 +247,19 @@ class FilmCalibration:
         roiList = []
         level_count = 0
         filmDose_obj = FilmDoseClass.FilmDose(self.workingdir+self.imagefilename)
-        application_window = tk.Tk()
-        application_window.withdraw()
+
         while True:
-            answer = simpledialog.askstring("Input", f"Introduce dose (Gy) for level {level_count+1}.",parent=application_window)
+            application_window = tk.Tk()
+            application_window.withdraw()
+            answer = simpledialog.askstring("Input", f"Introduce dose (Gy) for level {level_count+1}.",
+                                            parent=application_window)
             if(answer==None):
+                application_window.destroy()
                 break
-            if(np.float(answer)<0 or answer==''): 
+            if(np.float(answer)<0 or answer==''):
+                application_window.destroy()
                 break
+            application_window.destroy()
             doseList.append(np.float(answer))
             rs = filmDose_obj.SelectRectangle()
             x = [np.int(rs.corners[0][0]), np.int(rs.corners[0][2])]
@@ -251,7 +280,7 @@ class FilmCalibration:
             roi = np.array(np.power(10,roiList[i]))
             self.PV[i] = np.mean(65535.0/roi,axis=(0,1))
             self.PVstd_dev[i] = np.std(65535.0/roi,axis=(0,1))
-        application_window.destroy()
+
         self.Weights = np.power(1.0/OD_std_devs,2)
         self.Weights[:,0] = self.Weights[:,0] / np.sum(self.Weights[:,0])
         self.Weights[:,1] = self.Weights[:,1] / np.sum(self.Weights[:,1])
@@ -267,7 +296,7 @@ class FilmCalibration:
             for c in [0,1,2]:
                 L = L + '{:.2f}'.format(self.PV[level,c]) + ' '
                 L = L + '{:.2f}'.format(self.PVstd_dev[level,c]) + ' '
-            L = L  + '{:.4f}'.format(self.D[level]) + '\n'
+            L = L + '{:.4f}'.format(self.D[level]) + '\n'
             file_obj.write(L)
         file_obj.close()
     
@@ -275,15 +304,15 @@ class FilmCalibration:
         fig = plt.figure()
         plt.plot(self.ODnet[:,0],self.D, 'ro')
         x = np.arange(0,np.max(self.ODnet[:,0]*1.1),0.01)
-        y = self.Get_DoseFromODnet(x,0)
+        y = self.get_dose_from_nod(x,0)
         plt.plot(x,y)
         plt.plot(self.ODnet[:,1],self.D, 'go')
         x = np.arange(0,np.max(self.ODnet[:,1]*1.1),0.01)
-        y = self.Get_DoseFromODnet(x,1)
+        y = self.get_dose_from_nod(x,1)
         plt.plot(x,y)
         plt.plot(self.ODnet[:,2],self.D, 'bo')
         x = np.arange(0,np.max(self.ODnet[:,2]*1.1),0.01)
-        y = self.Get_DoseFromODnet(x,2)
+        y = self.get_dose_from_nod(x,2)
         plt.plot(x,y)
         plt.show(block=True)
 

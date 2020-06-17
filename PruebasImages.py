@@ -35,6 +35,7 @@ def main():
         file_path = filedialog.askopenfilename(title='Open Calibration file')
         root.destroy()
         filmDoseObj.AddCalibrationFromFile(file_path)
+        dosis = filmDoseObj.get_dose()
     # Aplica corrección de la calibración
     if ApplyCalCorrection:
         filmDoseObj.CalibrationCorrection()

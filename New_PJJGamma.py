@@ -1188,27 +1188,35 @@ class Objeto_Ppal:
         self.dosis = dosis
         
     def get_dosis(self, query):
+        if(self.get_tipo()=='pnc'):
+            dosis = self.dosis
+        else:
+            dosis = self.fdo.get_dosis().swapaxis(1,2).swapaxis(0,1)
         if query == 0:
-            return self.dosis[0]
+            return dosis[0]
         if query == 1:
-            return self.dosis[1]
+            return dosis[1]
         if query == 2:
-            return self.dosis[2]
+            return dosis[2]
         if query == 3:
-            return self.dosis
+            return dosis
         
     def set_pixel(self, pixel):
         self.pixel = pixel
         
     def get_pixel(self, query):
+        if (self.get_tipo() == 'pnc'):
+            pixel = self.pixel
+        else:
+            pixel = self.fdo.get_pixel().swapaxis(1, 2).swapaxis(0, 1)
         if query == 0:
-            return self.pixel[0]
+            return pixel[0]
         if query == 1:
-            return self.pixel[1]
+            return pixel[1]
         if query == 2:
-            return self.pixel[2]
+            return pixel[2]
         if query == 3:
-            return self.pixel
+            return pixel
         
     def set_don(self, don):
         self.don = don
