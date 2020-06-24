@@ -1,0 +1,3 @@
+Polinomio_2Grado
+Polinomio_3Grado
+Percolacion
