@@ -349,13 +349,12 @@ class FilmCalibration:
                     Cia = 0.0
                     Cib = 0.0
                     for c in np.arange(3):
-
                         Ca = Ca + np.power(DDmean[c] * nodcal[c] / Scal[c], 2)
                         Cb = Cb + np.power(DDmean[c] * self.OD0[c] / Scal[c], 2)
                         Cab = Cab + np.power(DDmean[c] / Scal[c], 2) * nodcal[c] * self.OD0[c]
-                        Cia = Cia + np.power(DDmean[c] / Scal[c], 2) * \
+                        Cia = Cia + (DDmean[c] / np.power(Scal[c], 2)) * \
                               nodcal[c] * (Drois[l][i, j, c]-Dmean[l])
-                        Cib = Cib + np.power(DDmean[c] / Scal[c], 2) * \
+                        Cib = Cib + (DDmean[c] / np.power(Scal[c], 2)) * \
                               self.OD0[c] * (Drois[l][i, j, c] - Dmean[l])
                     alpha = alpha + (Cia * Cb - Cib * Cab) / (Ca * Cb - Cab * Cab)
                     alpha2 = alpha2 + np.power((Cia * Cb - Cib * Cab) / (Ca * Cb - Cab * Cab), 2)
