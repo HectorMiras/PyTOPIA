@@ -1,4 +1,4 @@
-import FilmCalibrationClass
+import FilmCalibrationClass_Dam
 import tkinter as tk
 from tkinter import filedialog
 
@@ -8,7 +8,7 @@ def main():
     file_path = filedialog.askopenfilename(title='Open Calibration (image or text)')
     appwindow.destroy()
     if(file_path != ''):
-        filmCal_obj = FilmCalibrationClass.FilmCalibration(file_path)
+        filmCal_obj = FilmCalibrationClass_Dam.FilmCalibration(file_path)
         if(filmCal_obj.imagefilename is not None):
             appwindow = tk.Tk()
             appwindow.withdraw()
