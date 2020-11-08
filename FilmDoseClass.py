@@ -406,6 +406,11 @@ class FilmDose:
         sigma_coef3 = self.Calibration.Sigma_n
 
         od0 = self.OD0
+
+        indice_medio = 0
+        alpha_average = 0
+        beta_average = 0
+
         for h in range(nod_roi.shape[0]):
             if cont2/cont_lim > 0.05:
                 cont2 = 0.0
@@ -416,7 +421,8 @@ class FilmDose:
                 #od0 = np.array([0.2033, 0.2108, 0.3590])
                 D_pixel = coef1*netOD+np.sign(netOD)*coef2*np.power(np.abs(netOD),coef3)
                 #sigma_D = self.Calibration.DevicSigmaDose(netOD)
-                sigma_D = np.sqrt(np.power(netOD*sigma_coef1,2) + np.power(netOD,2*coef3)*np.power(sigma_coef2,2))
+                sigma_D = np.sqrt(np.power(netOD*sigma_coef1, 2) +
+                                  np.power(np.abs(netOD), 2*coef3)*np.power(sigma_coef2, 2))
                 #sigma_D = np.array([0.049, 0.0341, 0.0575])
                 nod = np.array([0.0 + (netOD[c] > 0) * netOD[c] + (netOD[c] < 0) * 0.00001 for c in [0, 1, 2]])
                 #nod = np.array([0.2781, 0.1908, 0.0976])
@@ -440,6 +446,9 @@ class FilmDose:
 
                 alpha = (Cia * Cb - Cib * Cab) / (Ca * Cb - Cab * Cab)
                 beta = (Cia * Cab - Cib * Ca) / (Cab * Cab - Ca * Cb)
+
+                if np.isnan(alpha) or np.isnan(beta):
+                    xx=1
 
                 d_alpha = (d_Cia * Cb + Cia * d_Cb - d_Cib * Cab - Cib * d_Cab -
                            alpha * (d_Ca * Cb + Ca * d_Cb - 2. * Cab * d_Cab)) / (Ca * Cb - Cab * Cab)
@@ -528,6 +537,9 @@ class FilmDose:
                                                         dosis_new[0,1] - dosis_new[0,2]]))) / np.min(dosis_new)
                     indice_max = indice_max + 1
 
+                indice_medio = indice_medio + indice_max
+                alpha_average = alpha_average + alpha
+                beta_average = beta_average + beta
                 self.alpha[h + y[0], w + x[0]] = alpha
                 self.beta[h + y[0], w + x[0]] = beta
 
@@ -539,12 +551,19 @@ class FilmDose:
                 cont2 = cont2 + 3.0
                 cont = cont + 3.0
 
-
-        alpha_image = np.array((255 * self.alpha / 0.01 + 127.5).astype(np.uint8))
+        indice_medio = indice_medio/(nod_roi.shape[0]*nod_roi.shape[1])
+        alpha_average = alpha_average/(nod_roi.shape[0]*nod_roi.shape[1])
+        beta_average = beta_average/(nod_roi.shape[0]*nod_roi.shape[1])
+        print(f'alpha average = {alpha_average}')
+        print(f'beta average = {beta_average}')
+        print(f'indice medio = {indice_medio}')
+        alpha_image = np.array((255 * (self.alpha-np.min(self.alpha))/
+                                (np.max(self.alpha)-np.min(self.alpha))).astype(np.uint8))
         im_alpha = Image.fromarray(alpha_image)
         imname = 'AlphaMap_' + self.imagefilename
         im_alpha.save(self.workingdir + imname)
-        beta_image = np.array((255 * self.beta / 0.1 + 127.5).astype(np.uint8))
+        beta_image = np.array((255 * (self.beta - np.min(self.beta)) /
+                                (np.max(self.beta) - np.min(self.beta))).astype(np.uint8))
         im_beta = Image.fromarray(beta_image)
         imname = 'BetaMap_' + self.imagefilename
         im_beta.save(self.workingdir + imname)
