@@ -3,7 +3,7 @@ import numpy as np
 from lmfit import Model
 import tifffile #https://pypi.org/project/tifffile/
 from PIL import Image
-import FilmCalibrationClass
+import FilmCalibrationClass_Dam
 import matplotlib.pyplot as plt
 import matplotlib.widgets as widgets
 import tkinter as tk
@@ -137,7 +137,7 @@ class FilmDose:
         self.OD0 = self.Calibration.OD0
 
     def add_calibration(self, pv, d, pv_std_dev=None):
-        fcalobj = FilmCalibrationClass.FilmCalibration()
+        fcalobj = FilmCalibrationClass_Dam.FilmCalibration()
         fcalobj.calibration_from_arrays(pv, d, pv_std_dev)
         self.Calibration = fcalobj
         self.OD0 = self.Calibration.OD0
@@ -148,7 +148,7 @@ class FilmDose:
         #root.withdraw()
         #file_path = filedialog.askopenfilename(title='Open Calibration file')
         #root.destroy()
-        self.Calibration = FilmCalibrationClass.FilmCalibration(inputfile)
+        self.Calibration = FilmCalibrationClass_Dam.FilmCalibration(inputfile)
         self.OD0 = self.Calibration.OD0
         
     # Función que permite seleccionar una ROI rectangular en la imagen.
@@ -375,13 +375,14 @@ class FilmDose:
     # Método de corrección multicanal con dos parámetros (alfa, beta).
     # Basado en el método desarrollado por Damian.
     # En desarrollo...
-    def multichannel_correction2(self):
+    def multichannel_correction_Dam(self):
         from scipy import optimize
         import ctypes  # An included library with Python install.
         ctypes.windll.user32.MessageBoxW(0, "Select area for multichannel correction", "", 0)
         rs = self.SelectRectangle()
         x = [np.int(rs.corners[0][0]), np.int(rs.corners[0][2])]
         y = [np.int(rs.corners[1][0]), np.int(rs.corners[1][2])]
+
         nod_roi = self.OD[y[0]:(y[1] + 1), x[0]:(x[1] + 1), 0:3]
         nod_roi = nod_roi - self.OD0
         self.alpha = np.zeros([self.OD.shape[0], self.OD.shape[1]])
@@ -390,35 +391,160 @@ class FilmDose:
         cont = 0.0
         cont2 = 0.0
         cont_lim = nod_roi.shape[0] * nod_roi.shape[1] * nod_roi.shape[2]
+        F=np.zeros([3, 1])
+        J = np.zeros([3,3])
+
+        coef1 = self.Calibration.DevicParam_A
+        coef2 = self.Calibration.DevicParam_B
+        coef3 = self.Calibration.DevicParam_n
+        alpha_media = self.Calibration.AlphaCal
+        beta_media = self.Calibration.BetaCal
+        lambda_alpha = 1.0 / np.power(self.Calibration.SigmaAlphaCal,2)
+        lambda_beta = 1.0 / np.power(self.Calibration.SigmaBetaCal,2)
+        sigma_coef1 = self.Calibration.Sigma_A
+        sigma_coef2 = self.Calibration.Sigma_B
+        sigma_coef3 = self.Calibration.Sigma_n
+
+        od0 = self.OD0
         for h in range(nod_roi.shape[0]):
             if cont2/cont_lim > 0.05:
                 cont2 = 0.0
                 print(f'Multichannel correction process: {np.trunc(100*cont/cont_lim)}%')
             for w in range(nod_roi.shape[1]):
-                fittet_params = optimize.minimize(self.optimization_func2a,
-                                                  x0=np.array([0.01, 0.01]),
-                                                  args=nod_roi[h, w, :]).x
-                if fittet_params[0] > 0.2:
-                    fittet_params[0] = 0.2
-                if fittet_params[1] > 0.2:
-                    fittet_params[1] = 0.2
-                if fittet_params[0] < -0.2:
-                    fittet_params[0] = -0.2
-                if fittet_params[1] < -0.2:
-                    fittet_params[1] = -0.2
-                self.alpha[h + y[0], w + x[0]] = fittet_params[0]
-                self.beta[h + y[0], w + x[0]] = fittet_params[1]
-                for c in [0, 1, 2]:
-                    od = nod_roi[h, w, c] + self.OD0[c]
-                    od = self.OD0[c] + (od - (1 + fittet_params[1])*self.OD0[c])/(1 + fittet_params[0])
-                    self.OD[h + y[0], w + x[0], c] = od
-                    cont = cont + 1.0
-                    cont2 = cont2 + 1.0
-        alpha_image = np.array((255 * self.alpha / 0.4 + 127.5).astype(np.uint8))
+                netOD = np.array([nod_roi[h, w, c] for c in [0, 1, 2]])
+                #netOD = np.array([0.2781, 0.1908, 0.0976])
+                #od0 = np.array([0.2033, 0.2108, 0.3590])
+                D_pixel = coef1*netOD+np.sign(netOD)*coef2*np.power(np.abs(netOD),coef3)
+                #sigma_D = self.Calibration.DevicSigmaDose(netOD)
+                sigma_D = np.sqrt(np.power(netOD*sigma_coef1,2) + np.power(netOD,2*coef3)*np.power(sigma_coef2,2))
+                #sigma_D = np.array([0.049, 0.0341, 0.0575])
+                nod = np.array([0.0 + (netOD[c] > 0) * netOD[c] + (netOD[c] < 0) * 0.00001 for c in [0, 1, 2]])
+                #nod = np.array([0.2781, 0.1908, 0.0976])
+                dose = coef1*nod+coef2*np.power(nod,coef3)
+                d_dose = coef1 + coef3*coef2*np.power(nod,coef3-1)
+                d2_dose = (coef3-1)*coef3*coef2*np.power(nod,coef3-2)
+                d3_dose = (coef3 - 2)*(coef3 - 1) * coef3 * coef2 * np.power(nod, coef3 - 3)
+
+                Ca = np.sum(np.power(d_dose * nod / sigma_D, 2)) + lambda_alpha
+                Cb = np.sum(np.power(d_dose * od0 / sigma_D, 2)) + lambda_beta
+                Cab = np.sum(np.power(d_dose / sigma_D, 2) * nod * od0)
+                Cia = np.sum(d_dose * nod * (D_pixel - dose) / np.power(sigma_D, 2)) + lambda_alpha * alpha_media
+                Cib = np.sum(d_dose * od0 * (D_pixel - dose) / np.power(sigma_D, 2)) + lambda_beta * beta_media
+
+                d_Ca = 2 * d_dose * nod * (nod * d2_dose+d_dose) / np.power(sigma_D,2)
+                d_Cb = 2 * d_dose * d2_dose * np.power(od0/sigma_D, 2)
+                d_Cab = d_dose * od0 * (2 * nod * d2_dose + d_dose) / np.power(sigma_D, 2)
+                d_Cia = (d2_dose * nod*(D_pixel - dose) + d_dose * (D_pixel - dose) -
+                        np.power(d_dose, 2) * nod) / np.power(sigma_D, 2)
+                d_Cib = (d2_dose * od0 * (D_pixel - dose) - np.power(d_dose, 2) * od0) / np.power(sigma_D, 2)
+
+                alpha = (Cia * Cb - Cib * Cab) / (Ca * Cb - Cab * Cab)
+                beta = (Cia * Cab - Cib * Ca) / (Cab * Cab - Ca * Cb)
+
+                d_alpha = (d_Cia * Cb + Cia * d_Cb - d_Cib * Cab - Cib * d_Cab -
+                           alpha * (d_Ca * Cb + Ca * d_Cb - 2. * Cab * d_Cab)) / (Ca * Cb - Cab * Cab)
+                d_beta = (d_Cia * Cab + Cia * d_Cab - d_Cib * Ca - Cib * d_Ca -
+                          beta * (2. * Cab * d_Cab - d_Ca * Cb - Ca * d_Cb)) / (Cab * Cab - Ca * Cb)
+
+                var_NOD = nod*alpha + od0 * beta
+                d_var_NOD = alpha + nod * d_alpha + od0 * d_beta
+
+                mu = dose + d_dose * var_NOD
+                der_mu = d_dose * (alpha + 1) + d2_dose * var_NOD
+
+                d_mu = d_dose * (d_var_NOD + 1) + d2_dose * var_NOD
+                d_der_mu = d2_dose * (alpha + 1 + d_var_NOD) + d_dose * d_alpha + d3_dose * var_NOD
+
+                dif = (mu - D_pixel) / np.power(sigma_D, 2)
+
+                F[0, 0] = np.sum(dif * der_mu / d_dose)
+                F[1, 0] = dose[0] - dose[1]
+                F[2, 0] = dose[0] - dose[2]
+
+                for c in np.arange(3):
+                    J[0, c] = d_mu[c] * der_mu[c] / (d_dose[c] * np.power(sigma_D[c], 2))+dif[c] * d_der_mu[c] / \
+                            d_dose[c] - dif[c] * der_mu[c] * d2_dose[c] / np.power(d_dose[c], 2)
+                J[1, 0] = d_dose[0]
+                J[1, 1] = -d_dose[1]
+                J[2, 0] = d_dose[0]
+                J[2, 2] = -d_dose[2]
+
+                A = np.linalg.inv(J)
+
+                indice_max = 0
+                dif_dosis = 1
+                F_new = np.zeros([3, 1])
+                NOD_pix = nod
+                NOD_new = NOD_pix - np.matrix.transpose(np.linalg.solve(J, F))
+                NOD_new[NOD_new < 0] = 1e-10
+
+                while (indice_max <= 30) and (dif_dosis > 1.0e-10):
+                    nod = NOD_new
+                    dose = coef1 * nod + coef2 * np.power(nod, coef3)
+                    d_dose = coef1 + coef3 * coef2 * np.power(nod, coef3 - 1)
+                    d2_dose = (coef3 - 1) * coef3 * coef2 * np.power(nod, coef3 - 2)
+
+                    Ca = np.sum(np.power(d_dose * nod / sigma_D, 2), axis=1)[0] + lambda_alpha
+                    Cb = np.sum(np.power(d_dose * od0 / sigma_D, 2),axis=1)[0] + lambda_beta
+                    Cab = np.sum(np.power(d_dose / sigma_D, 2) * nod * od0,axis=1)[0]
+                    Cia = np.sum(d_dose * nod * (D_pixel - dose) / np.power(sigma_D, 2),axis=1)[0] + \
+                          lambda_alpha * alpha_media
+                    Cib = np.sum(d_dose * od0 * (D_pixel - dose) / np.power(sigma_D, 2),axis=1)[0] + \
+                          lambda_beta * beta_media
+
+                    alpha = (Cia * Cb - Cib * Cab) / (Ca * Cb - Cab * Cab)
+                    beta = (Cia * Cab - Cib * Ca) / (Cab * Cab - Ca * Cb)
+
+                    var_NOD = nod * alpha + od0 * beta
+
+                    mu = dose + d_dose * var_NOD
+                    der_mu = d_dose * (alpha + 1) + d2_dose * var_NOD
+
+                    dif = (mu - D_pixel) / np.power(sigma_D, 2)
+
+                    F_new[0,0] = np.sum(dif * der_mu / d_dose, axis=1)[0]
+                    F_new[1,0] = dose[0,0] - dose[0,1]
+                    F_new[2,0] = dose[0,0] - dose[0,2]
+
+                    dif_NOD = NOD_new - NOD_pix
+                    dif_F = F_new - F
+
+                    denom = np.matmul(dif_NOD, np.matmul(A,dif_F))[0]
+                    if denom == 0: denom = 1
+
+                    #dif_NODt = np.zeros([1,3])
+                    #dif_NODt[0,:] = dif_NOD[:]
+                    A = A + np.matmul(np.matmul(np.transpose(dif_NOD)-np.matmul(A,dif_F),dif_NOD), A)/denom
+
+                    NOD_pix = NOD_new
+                    NOD_new = NOD_pix - np.matrix.transpose(np.matmul(A, F_new))
+                    NOD_new[NOD_new < 0] = 1e-10
+
+                    F = F_new
+                    dosis_new = coef1 * NOD_new + coef2 * np.power(NOD_new, coef3)
+
+                    dif_dosis = np.max(np.abs(np.array([dosis_new[0,0] - dosis_new[0,1],
+                                                        dosis_new[0,0] - dosis_new[0,2],
+                                                        dosis_new[0,1] - dosis_new[0,2]]))) / np.min(dosis_new)
+                    indice_max = indice_max + 1
+
+                self.alpha[h + y[0], w + x[0]] = alpha
+                self.beta[h + y[0], w + x[0]] = beta
+
+                for c in [0,1,2]:
+                    #aux = NOD_new[0, c] + od0[c]
+                    self.OD[h + y[0], w + x[0], c] = NOD_new[0, c] + od0[c]
+                    #self.OD[h + y[0], w + x[0], c] = (self.OD[h + y[0], w + x[0], c]-
+                    #                                 od0[c]*(1+beta))/(1.0+alpha) + od0[c]
+                cont2 = cont2 + 3.0
+                cont = cont + 3.0
+
+
+        alpha_image = np.array((255 * self.alpha / 0.01 + 127.5).astype(np.uint8))
         im_alpha = Image.fromarray(alpha_image)
         imname = 'AlphaMap_' + self.imagefilename
         im_alpha.save(self.workingdir + imname)
-        beta_image = np.array((255 * self.beta / 0.4 + 127.5).astype(np.uint8))
+        beta_image = np.array((255 * self.beta / 0.1 + 127.5).astype(np.uint8))
         im_beta = Image.fromarray(beta_image)
         imname = 'BetaMap_' + self.imagefilename
         im_beta.save(self.workingdir + imname)

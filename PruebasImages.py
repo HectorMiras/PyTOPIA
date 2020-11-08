@@ -42,9 +42,19 @@ def main():
         print('Calibration correction factors:')
         print(filmDoseObj.CalibrationCorrectionFactors)
 
-    # Aplica método de corrección multicanal de 1 parámetro
+    # Asigna parametros alpha y beta y sus sigmas
+    #filmDoseObj.Calibration.AlphaCal = 0.0
+    #filmDoseObj.Calibration.SigmaAlphaCal = 1.0/np.sqrt(1.3083e4)
+    #filmDoseObj.Calibration.BetaCal = 0.0
+    #filmDoseObj.Calibration.SigmaBetaCal = 1.0/np.sqrt(7.5337e3)
+
+    #filmDoseObj.Calibration.DevicParam_A = np.array([6.702, 11.3167, 28.6477])
+    #filmDoseObj.Calibration.DevicParam_B = np.array([47.5963, 43.9465, 160.7376])
+    #filmDoseObj.Calibration.DevicParam_n = np.array([3.04, 2.47, 2.56])
+
+    # Aplica método de corrección multicanal de Damian
     if ApplyMultichannel:
-        filmDoseObj.multichannel_correction1()
+        filmDoseObj.multichannel_correction_Dam()
 
     # Salva la imagen en dosis.
     if GuardaDosis:

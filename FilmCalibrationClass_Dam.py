@@ -75,6 +75,7 @@ class FilmCalibration:
                 self.PV = np.loadtxt(inputFile, usecols=(0, 1, 2), skiprows=0)
                 self.obtain_ODvalues_from_PV()
             self.OptimizeDevicParameters()
+            self.OptimizeDevicParameters2()
         else:
             # file with invalid extension
             print("The file has an invalid extension: " + Path(inputFile).suffix)
@@ -214,8 +215,8 @@ class FilmCalibration:
 
     def DevicInvCalFunc(self, y, A, B, n):
         f = (lambda x: A * x + B * np.power(x, n))
-        od = inversefunc(f, y, domain=[0, 100])
-        return od
+        nod = inversefunc(f, y, domain=[0, 100])
+        return nod
 
     def OptimizePercolParameters(self):
         for c in [0, 1, 2]:
@@ -259,6 +260,31 @@ class FilmCalibration:
             self.Sigma_A[c] = result.params['A'].stderr
             self.Sigma_B[c] = result.params['B'].stderr
             self.Sigma_n[c] = result.params['n'].stderr
+            print("Fit results for channel {}:".format(c))
+            # result.plot_fit()
+            print(result.fit_report())
+            print('')
+        #self.show_calibration_plot()
+
+    def OptimizeDevicParameters2(self):
+        for c in [0, 1, 2]:
+            fmodel = Model(self.DevicCalFunc)
+            # create parameters -- these are named from the function arguments --
+            # giving initial values
+            params = fmodel.make_params(A=self.DevicParam_A[c], B=self.DevicParam_B[c], n=self.DevicParam_n[c])
+            # fix n:
+            params['n'].vary = False
+            # limit parameter values
+            params['A'].min = 0
+            params['A'].max = 100
+            params['B'].min = 0
+            params['B'].max = 500
+            result = fmodel.fit(self.D, params, x=self.ODnet[:, c])
+            self.DevicParam_A[c] = result.params['A']
+            self.DevicParam_B[c] = result.params['B']
+            self.Sigma_A[c] = result.params['A'].stderr
+            self.Sigma_B[c] = result.params['B'].stderr
+            self.Sigma_n[c] = 0.0
             print("Fit results for channel {}:".format(c))
             # result.plot_fit()
             print(result.fit_report())
@@ -310,8 +336,9 @@ class FilmCalibration:
         self.Weights[:, 2] = self.Weights[:, 2] / np.sum(self.Weights[:, 2])
         # self.OptimizePercolParameters()
         self.OptimizeDevicParameters()
+        self.OptimizeDevicParameters2()
         self.EvaluateAlphaBetaParams(doseList,roiList)
-        self.show_calibration_plot()
+        #self.show_calibration_plot()
 
     def EvaluateAlphaBetaParams(self,Dlist,ODrois):
         NODrois = []
@@ -320,7 +347,7 @@ class FilmCalibration:
         Dmean = []
         NODmean = []
         for i in range(len(Dlist)):
-            if(Dlist[i] > 0.5 and Dlist[i]<15):
+            if(Dlist[i] > 1):
                 NODmean.append(np.mean(ODrois[i], axis=(0, 1)) - self.OD0)
                 NODrois.append(ODrois[i] - self.OD0)
                 Drois.append(self.DevicCalFunc(
@@ -333,53 +360,49 @@ class FilmCalibration:
         AlphaSigmaList = []
         BetaSigmaList = []
         npointsTotal = 0
+
+        coef1 = self.DevicParam_A
+        coef2 = self.DevicParam_B
+        coef3 = self.DevicParam_n
+        sigma_coef1 = self.Sigma_A
+        sigma_coef2 = self.Sigma_B
         for l in range(len(Dmean)):
-            alpha = 0.0
-            beta = 0.0
-            alpha2 = 0.0
-            beta2 = 0.0
-            nodcal = np.array([self.GetODnetFromDose(Dmean[l], c) for c in [0, 1, 2]])
-            DDmean = self.DevicCalFuncDerivate(nodcal, self.DevicParam_A, self.DevicParam_B, self.DevicParam_n)
-            Scal = self.DevicSigmaDose(nodcal)
-            for i in np.arange(NODrois[l].shape[0]):
-                for j in np.arange(NODrois[l].shape[1]):
-                    Ca = 0.0
-                    Cb = 0.0
-                    Cab = 0.0
-                    Cia = 0.0
-                    Cib = 0.0
-                    for c in np.arange(3):
-                        Ca = Ca + np.power(DDmean[c] * nodcal[c] / Scal[c], 2)
-                        Cb = Cb + np.power(DDmean[c] * self.OD0[c] / Scal[c], 2)
-                        Cab = Cab + np.power(DDmean[c] / Scal[c], 2) * nodcal[c] * self.OD0[c]
-                        Cia = Cia + (DDmean[c] / np.power(Scal[c], 2)) * \
-                              nodcal[c] * (Drois[l][i, j, c]-Dmean[l])
-                        Cib = Cib + (DDmean[c] / np.power(Scal[c], 2)) * \
-                              self.OD0[c] * (Drois[l][i, j, c] - Dmean[l])
-                    alpha = alpha + (Cia * Cb - Cib * Cab) / (Ca * Cb - Cab * Cab)
-                    alpha2 = alpha2 + np.power((Cia * Cb - Cib * Cab) / (Ca * Cb - Cab * Cab), 2)
-                    beta = beta + (Cia * Cab - Cib * Ca) / (Cab * Cab - Ca * Cb)
-                    beta2 = beta2 + np.power((Cia * Cab - Cib * Ca) / (Cab * Cab - Ca * Cb), 2)
+            D = Dmean[l]
+            NOD = np.array([self.GetODnetFromDose(D, c) for c in [0, 1, 2]])
+            Dcal_pixel = coef1 * NODrois[l] + \
+                         np.sign(NODrois[l]) * coef2 * np.power(np.abs(NODrois[l]), coef3)
+            sigma_Dcal = np.sqrt(np.power(NODrois[l] * sigma_coef1, 2) +
+                              np.power(NODrois[l], 2 * coef3) * np.power(sigma_coef2, 2))
+
+            d_dose = coef1+coef3*coef2*np.power(NOD,(coef3 - 1))
+            d_mu_da = d_dose * NOD
+            d_mu_db = d_dose * self.OD0
+
+            Cai = np.sum((D - Dcal_pixel) * d_mu_da / np.power(sigma_Dcal, 2), axis=2)
+            Caa = np.sum(d_dose * NOD * d_mu_da / np.power(sigma_Dcal, 2), axis=2)
+            Cab = np.sum(d_dose * self.OD0 * d_mu_da / np.power(sigma_Dcal, 2), axis=2)
+
+            Cbi = np.sum((D - Dcal_pixel) * d_mu_db / np.power(sigma_Dcal, 2), axis=2)
+            Cbb = np.sum(d_dose * self.OD0 * d_mu_db / np.power(sigma_Dcal, 2), axis=2)
+
+            alpha = np.mean((Cai * Cbb - Cbi * Cab) / (Caa * Cbb - Cab * Cab))
+            alpha2 = np.std((Cai * Cbb - Cbi * Cab) / (Caa * Cbb - Cab * Cab))
+            beta = np.mean((Cai * Cab - Cbi * Caa) / (Cab * Cab - Caa * Cbb))
+            beta2 = np.std((Cai * Cab - Cbi * Caa) / (Cab * Cab - Caa * Cbb))
             npoints = (NODrois[l].shape[0] * NODrois[l].shape[1])
             npointsTotal = npointsTotal + npoints
-            self.AlphaCal = self.AlphaCal + alpha
-            self.SigmaAlphaCal = self.SigmaAlphaCal + alpha2
-            self.BetaCal = self.BetaCal + beta
-            self.SigmaBetaCal = self.SigmaBetaCal + beta2
-            alpha = alpha / npoints
-            alpha2 = np.sqrt((alpha2 - alpha*alpha*npoints)/npoints)
-            beta = beta / npoints
-            beta2 = np.sqrt((beta2 - beta * beta * npoints) / npoints)
+            self.AlphaCal = self.AlphaCal + alpha*npoints
+            self.SigmaAlphaCal = self.SigmaAlphaCal + np.power(alpha2, 2)*npoints
+            self.BetaCal = self.BetaCal + beta*npoints
+            self.SigmaBetaCal = self.SigmaBetaCal + np.power(beta2, 2)*npoints
             AlphaList.append(alpha)
             AlphaSigmaList.append(alpha2)
             BetaList.append(beta)
             BetaSigmaList.append(beta2)
         self.AlphaCal = self.AlphaCal/npointsTotal
         self.BetaCal = self.BetaCal/npointsTotal
-        self.SigmaAlphaCal = np.sqrt((self.SigmaAlphaCal - self.AlphaCal * self.AlphaCal * npointsTotal)
-                                      / npointsTotal)
-        self.SigmaBetaCal = np.sqrt((self.SigmaBetaCal - self.BetaCal * self.BetaCal * npointsTotal)
-                                     / npointsTotal)
+        self.SigmaAlphaCal = np.sqrt(self.SigmaAlphaCal/npointsTotal)
+        self.SigmaBetaCal = np.sqrt(self.SigmaBetaCal/npointsTotal)
         print(f'Alpha = {self.AlphaCal}  sigma = {self.SigmaAlphaCal}')
         print(f'Beta = {self.BetaCal}  sigma = {self.SigmaBetaCal}')
 
