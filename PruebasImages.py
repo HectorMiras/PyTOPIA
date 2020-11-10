@@ -35,22 +35,27 @@ def main():
         file_path = filedialog.askopenfilename(title='Open Calibration file')
         root.destroy()
         filmDoseObj.AddCalibrationFromFile(file_path)
-        dosis = filmDoseObj.get_dose()
+        # Asigna parametros alpha y beta y sus sigmas
+        # filmDoseObj.Calibration.AlphaCal = 5.74357e-5
+        #filmDoseObj.Calibration.AlphaCal = 0
+        #filmDoseObj.Calibration.SigmaAlphaCal = 0.00901
+        # filmDoseObj.Calibration.BetaCal = -0.000115175
+        #filmDoseObj.Calibration.BetaCal = 0
+        #filmDoseObj.Calibration.SigmaBetaCal = 0.0113175
+
+        #filmDoseObj.Calibration.DevicParam_A = np.array([7.02691762, 11.04462102, 29.33266638])
+        #filmDoseObj.Calibration.DevicParam_B = np.array([47.52669613, 43.42677272, 170.73321208])
+        #filmDoseObj.Calibration.DevicParam_n = np.array([3.1027201, 2.43657698, 2.64754729])
+        #filmDoseObj.Calibration.Sigma_A = np.array([0.15806952, 0.09939978, 0.41270207])
+        #filmDoseObj.Calibration.Sigma_B = np.array([0.38155465, 0.21216226, 2.47785548])
+
     # Aplica corrección de la calibración
     if ApplyCalCorrection:
         filmDoseObj.CalibrationCorrection()
         print('Calibration correction factors:')
         print(filmDoseObj.CalibrationCorrectionFactors)
 
-    # Asigna parametros alpha y beta y sus sigmas
-    #filmDoseObj.Calibration.AlphaCal = 0.0
-    #filmDoseObj.Calibration.SigmaAlphaCal = 1.0/np.sqrt(1.3083e4)
-    #filmDoseObj.Calibration.BetaCal = 0.0
-    #filmDoseObj.Calibration.SigmaBetaCal = 1.0/np.sqrt(7.5337e3)
 
-    #filmDoseObj.Calibration.DevicParam_A = np.array([6.702, 11.3167, 28.6477])
-    #filmDoseObj.Calibration.DevicParam_B = np.array([47.5963, 43.9465, 160.7376])
-    #filmDoseObj.Calibration.DevicParam_n = np.array([3.04, 2.47, 2.56])
 
     # Aplica método de corrección multicanal de Damian
     if ApplyMultichannel:

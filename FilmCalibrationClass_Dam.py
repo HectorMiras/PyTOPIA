@@ -29,6 +29,7 @@ class FilmCalibration:
         self.SigmaAlphaCal = 0.0
         self.BetaCal = 0.0
         self.SigmaBetaCal = 0.0
+        self.AlphaBetaPoints = 0
         self.PV = None
         self.OD0 = None
         self.ODnet = None
@@ -403,6 +404,7 @@ class FilmCalibration:
         self.BetaCal = self.BetaCal/npointsTotal
         self.SigmaAlphaCal = np.sqrt(self.SigmaAlphaCal/npointsTotal)
         self.SigmaBetaCal = np.sqrt(self.SigmaBetaCal/npointsTotal)
+        self.AlphaBetaPoints = npointsTotal
         print(f'Alpha = {self.AlphaCal}  sigma = {self.SigmaAlphaCal}')
         print(f'Beta = {self.BetaCal}  sigma = {self.SigmaBetaCal}')
 

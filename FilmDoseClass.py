@@ -187,7 +187,7 @@ class FilmDose:
         x = [np.int(rs.corners[0][0]), np.int(rs.corners[0][2])]
         y = [np.int(rs.corners[1][0]), np.int(rs.corners[1][2])]
         self.ROI = self.OD[y[0]:(y[1]+1), x[0]:(x[1]+1), 0:3]
-        od0 = np.mean(self.ROI, axis=(0, 1))
+        od0 = np.array(self.ROI)
 
         # Pide seleccionar el recorte irradiado a dosis conocida de referencia
         ctypes.windll.user32.MessageBoxW(0, "Select irradiated ROI", "", 0)
@@ -197,7 +197,7 @@ class FilmDose:
         #self.ROI = self.imagearray[y[0]:(y[1]+1),x[0]:(x[1]+1),0:3]
         #self.ODref = np.mean(np.log10(65535/self.ROI),axis=(0,1))
         self.ROI = self.OD[y[0]:(y[1]+1),x[0]:(x[1]+1),0:3]
-        odref = np.mean(self.ROI,axis=(0,1))
+        odref = np.array(self.ROI)
 
         # Solicita el valor de la dosis de referencia
         dref = np.empty(3)
@@ -214,8 +214,8 @@ class FilmDose:
     def calculate_calibration_correction_factors(self, od0, odref, dref):
         # Calcula la ODnet que corresponde a la dosis de referencia usando la curva de calibración.
         self.Dref = dref
-        self.OD0 = od0
-        self.ODref = odref
+        self.OD0 = np.mean(od0,axis=(0,1))
+        self.ODref = np.mean(odref,axis=(0,1))
         ODnetRefCal = np.array([0.0, 0.0, 0.0])
         for c in np.array([0, 1, 2]):
             ODnetRefCal[c] = self.Calibration.GetODnetFromDose(self.Dref[c], c)
@@ -225,6 +225,54 @@ class FilmDose:
         # Aplica el factor de corrección. Llevamos la película a las condiciones de la calibración
         self.OD = self.Calibration.OD0 + (self.OD - self.OD0) * self.CalibrationCorrectionFactors
         self.OD0 = self.Calibration.OD0
+
+        # Calcula las alphas y betas del roi de referencia para dosimetria multicanal
+        coef1 = self.Calibration.DevicParam_A
+        coef2 = self.Calibration.DevicParam_B
+        coef3 = self.Calibration.DevicParam_n
+        sigma_coef1 = self.Calibration.Sigma_A
+        sigma_coef2 = self.Calibration.Sigma_B
+
+        D = dref[0]
+        nod_ref = odref-np.mean(od0,axis=(0,1))
+        NOD = np.array([self.Calibration.GetODnetFromDose(D, c) for c in [0, 1, 2]])
+        Dcal_pixel = coef1 * nod_ref + \
+                     np.sign(nod_ref) * coef2 * np.power(np.abs(nod_ref), coef3)
+        sigma_Dcal = np.sqrt(np.power(np.abs(nod_ref) * sigma_coef1, 2) +
+                             np.power(np.abs(nod_ref), 2 * coef3) * np.power(sigma_coef2, 2))
+
+        d_dose = coef1 + coef3 * coef2 * np.power(NOD, (coef3 - 1))
+        d_mu_da = d_dose * NOD
+        d_mu_db = d_dose * self.OD0
+
+        Cai = np.sum((D - Dcal_pixel) * d_mu_da / np.power(sigma_Dcal, 2), axis=2)
+        Caa = np.sum(d_dose * NOD * d_mu_da / np.power(sigma_Dcal, 2), axis=2)
+        Cab = np.sum(d_dose * self.OD0 * d_mu_da / np.power(sigma_Dcal, 2), axis=2)
+
+        Cbi = np.sum((D - Dcal_pixel) * d_mu_db / np.power(sigma_Dcal, 2), axis=2)
+        Cbb = np.sum(d_dose * self.OD0 * d_mu_db / np.power(sigma_Dcal, 2), axis=2)
+
+        alpha = np.mean((Cai * Cbb - Cbi * Cab) / (Caa * Cbb - Cab * Cab))
+        sigma_alpha = np.std((Cai * Cbb - Cbi * Cab) / (Caa * Cbb - Cab * Cab))
+        beta = np.mean((Cai * Cab - Cbi * Caa) / (Cab * Cab - Caa * Cbb))
+        sigma_beta = np.std((Cai * Cab - Cbi * Caa) / (Cab * Cab - Caa * Cbb))
+        npoints = (nod_ref.shape[0] * nod_ref.shape[1])
+        self.Calibration.AlphaCal = (self.Calibration.AlphaCal*self.Calibration.AlphaBetaPoints +
+                                     alpha*npoints)/(npoints + self.Calibration.AlphaBetaPoints)
+        self.Calibration.BetaCal = (self.Calibration.BetaCal * self.Calibration.AlphaBetaPoints +
+                                     beta * npoints) / (npoints + self.Calibration.AlphaBetaPoints)
+
+        self.Calibration.SigmaAlphaCal = np.sqrt((np.power(self.Calibration.SigmaAlphaCal, 2) *
+                                                  self.Calibration.AlphaBetaPoints +
+                                                  sigma_alpha*sigma_alpha * npoints) /
+                                                 (npoints + self.Calibration.AlphaBetaPoints))
+        self.Calibration.SigmaBetaCal = np.sqrt((np.power(self.Calibration.SigmaBetaCal, 2) *
+                                                  self.Calibration.AlphaBetaPoints +
+                                                  sigma_beta * sigma_beta * npoints) /
+                                                 (npoints + self.Calibration.AlphaBetaPoints))
+        if self.Calibration.AlphaBetaPoints == 0:
+            self.Calibration.AlphaCal = 0.0
+            self.Calibration.BetaCal = 0.0
 
     # Carga los ficheros con los polinomios de corrección de flatscanner y genera una lista con los coeficientes
     # Se carga un fichero por cada nivel de dosis, en orden creciente con la dosis.
@@ -382,7 +430,10 @@ class FilmDose:
         rs = self.SelectRectangle()
         x = [np.int(rs.corners[0][0]), np.int(rs.corners[0][2])]
         y = [np.int(rs.corners[1][0]), np.int(rs.corners[1][2])]
-
+        #x[0] = 650
+        #x[1]=7104
+        #y[0] = 225
+        #y[1] = 293
         nod_roi = self.OD[y[0]:(y[1] + 1), x[0]:(x[1] + 1), 0:3]
         nod_roi = nod_roi - self.OD0
         self.alpha = np.zeros([self.OD.shape[0], self.OD.shape[1]])
@@ -417,15 +468,10 @@ class FilmDose:
                 print(f'Multichannel correction process: {np.trunc(100*cont/cont_lim)}%')
             for w in range(nod_roi.shape[1]):
                 netOD = np.array([nod_roi[h, w, c] for c in [0, 1, 2]])
-                #netOD = np.array([0.2781, 0.1908, 0.0976])
-                #od0 = np.array([0.2033, 0.2108, 0.3590])
                 D_pixel = coef1*netOD+np.sign(netOD)*coef2*np.power(np.abs(netOD),coef3)
-                #sigma_D = self.Calibration.DevicSigmaDose(netOD)
                 sigma_D = np.sqrt(np.power(netOD*sigma_coef1, 2) +
                                   np.power(np.abs(netOD), 2*coef3)*np.power(sigma_coef2, 2))
-                #sigma_D = np.array([0.049, 0.0341, 0.0575])
                 nod = np.array([0.0 + (netOD[c] > 0) * netOD[c] + (netOD[c] < 0) * 0.00001 for c in [0, 1, 2]])
-                #nod = np.array([0.2781, 0.1908, 0.0976])
                 dose = coef1*nod+coef2*np.power(nod,coef3)
                 d_dose = coef1 + coef3*coef2*np.power(nod,coef3-1)
                 d2_dose = (coef3-1)*coef3*coef2*np.power(nod,coef3-2)
@@ -483,12 +529,12 @@ class FilmDose:
                 indice_max = 0
                 dif_dosis = 1
                 F_new = np.zeros([3, 1])
-                NOD_pix = nod
+                NOD_pix = np.array([0.0, 0.0, 0.0]) +  nod
                 NOD_new = NOD_pix - np.matrix.transpose(np.linalg.solve(J, F))
                 NOD_new[NOD_new < 0] = 1e-10
 
                 while (indice_max <= 30) and (dif_dosis > 1.0e-10):
-                    nod = NOD_new
+                    nod = np.array([0.0, 0.0, 0.0]) + NOD_new
                     dose = coef1 * nod + coef2 * np.power(nod, coef3)
                     d_dose = coef1 + coef3 * coef2 * np.power(nod, coef3 - 1)
                     d2_dose = (coef3 - 1) * coef3 * coef2 * np.power(nod, coef3 - 2)
@@ -525,11 +571,11 @@ class FilmDose:
                     #dif_NODt[0,:] = dif_NOD[:]
                     A = A + np.matmul(np.matmul(np.transpose(dif_NOD)-np.matmul(A,dif_F),dif_NOD), A)/denom
 
-                    NOD_pix = NOD_new
+                    NOD_pix = np.array([0.0, 0.0, 0.0]) + NOD_new
                     NOD_new = NOD_pix - np.matrix.transpose(np.matmul(A, F_new))
                     NOD_new[NOD_new < 0] = 1e-10
 
-                    F = F_new
+                    F = np.zeros([3, 1]) + F_new
                     dosis_new = coef1 * NOD_new + coef2 * np.power(NOD_new, coef3)
 
                     dif_dosis = np.max(np.abs(np.array([dosis_new[0,0] - dosis_new[0,1],
@@ -557,17 +603,19 @@ class FilmDose:
         print(f'alpha average = {alpha_average}')
         print(f'beta average = {beta_average}')
         print(f'indice medio = {indice_medio}')
-        alpha_image = np.array((255 * (self.alpha-np.min(self.alpha))/
-                                (np.max(self.alpha)-np.min(self.alpha))).astype(np.uint8))
-        im_alpha = Image.fromarray(alpha_image)
+        alpha_image = np.array((65535 * (self.alpha-np.min(self.alpha))/
+                                (np.max(self.alpha)-np.min(self.alpha))).astype(np.uint16))
+        #im_alpha = Image.fromarray(alpha_image)
         imname = 'AlphaMap_' + self.imagefilename
-        im_alpha.save(self.workingdir + imname)
-        beta_image = np.array((255 * (self.beta - np.min(self.beta)) /
-                                (np.max(self.beta) - np.min(self.beta))).astype(np.uint8))
-        im_beta = Image.fromarray(beta_image)
+        #im_alpha.save(self.workingdir + imname)
+        tifffile.imwrite(self.workingdir + imname, alpha_image, resolution=(self.dpi[0], self.dpi[1]))
+
+        beta_image = np.array((65535 * (self.beta - np.min(self.beta)) /
+                                (np.max(self.beta) - np.min(self.beta))).astype(np.uint16))
+        #im_beta = Image.fromarray(beta_image)
         imname = 'BetaMap_' + self.imagefilename
-        im_beta.save(self.workingdir + imname)
-        #return self.FScorr
+        #im_beta.save(self.workingdir + imname)
+        tifffile.imwrite(self.workingdir + imname, beta_image, resolution=(self.dpi[0], self.dpi[1]))
 
 
     def optimization_func2a(self, params, odnet):
