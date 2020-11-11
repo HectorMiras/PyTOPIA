@@ -7,7 +7,7 @@ from tkinter import simpledialog
 
 def main():
 
-    ApplyFS = True
+    ApplyFS = False
     ApplyCalibration = True
     ApplyCalCorrection = True
     ApplyMultichannel = True
@@ -60,6 +60,7 @@ def main():
     # Aplica método de corrección multicanal de Damian
     if ApplyMultichannel:
         filmDoseObj.multichannel_correction_Dam()
+        #filmDoseObj.multichannel_correction1()
 
     # Salva la imagen en dosis.
     if GuardaDosis:

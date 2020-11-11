@@ -389,10 +389,12 @@ class FilmDose:
                     cont = cont + 1.0
                     cont2 = cont2 + 1.0
         # Genera una imagen con el mapa de corrección multicanal obtenido
-        alpha_image = np.array((255 * (self.alpha-0.8) / 0.4).astype(np.uint8))
-        im_alpha = Image.fromarray(alpha_image)
-        imname = 'MultiChannelMap_' + self.imagefilename
-        im_alpha.save(self.workingdir + imname)
+        alpha_image = np.array((65535 * 0.5 + self.alpha * 1000))
+        np.clip(alpha_image, 0, 65535)
+        imname = 'MultichanelMap_' + self.imagefilename
+        tifffile.imwrite(self.workingdir + imname,
+                         alpha_image.astype(np.uint16),
+                         resolution=(self.dpi[0], self.dpi[1]))
 
     def mi_optimizacion(self, params, od, od0):
         paso = 0.002
@@ -603,19 +605,19 @@ class FilmDose:
         print(f'alpha average = {alpha_average}')
         print(f'beta average = {beta_average}')
         print(f'indice medio = {indice_medio}')
-        alpha_image = np.array((65535 * (self.alpha-np.min(self.alpha))/
-                                (np.max(self.alpha)-np.min(self.alpha))).astype(np.uint16))
-        #im_alpha = Image.fromarray(alpha_image)
+        alpha_image = np.array((65535 * 0.5 + self.alpha*1000))
+        np.clip(alpha_image, 0, 65535)
         imname = 'AlphaMap_' + self.imagefilename
-        #im_alpha.save(self.workingdir + imname)
-        tifffile.imwrite(self.workingdir + imname, alpha_image, resolution=(self.dpi[0], self.dpi[1]))
+        tifffile.imwrite(self.workingdir + imname,
+                         alpha_image.astype(np.uint16),
+                         resolution=(self.dpi[0], self.dpi[1]))
 
-        beta_image = np.array((65535 * (self.beta - np.min(self.beta)) /
-                                (np.max(self.beta) - np.min(self.beta))).astype(np.uint16))
-        #im_beta = Image.fromarray(beta_image)
+        beta_image = np.array((65535 * 0.5 + self.beta * 1000))
+        np.clip(beta_image, 0, 65535)
         imname = 'BetaMap_' + self.imagefilename
-        #im_beta.save(self.workingdir + imname)
-        tifffile.imwrite(self.workingdir + imname, beta_image, resolution=(self.dpi[0], self.dpi[1]))
+        tifffile.imwrite(self.workingdir + imname,
+                         beta_image.astype(np.uint16),
+                         resolution=(self.dpi[0], self.dpi[1]))
 
 
     def optimization_func2a(self, params, odnet):
