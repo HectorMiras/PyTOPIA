@@ -10,9 +10,10 @@ def main():
     ApplyFS = False
     ApplyCalibration = True
     ApplyCalCorrection = True
-    ApplyMultichannel = True
+    ApplyMultichannel = False
+    ApplyEnergyDependence = False
     GuardaDosis = True
-    GuardaPV = False
+    GuardaPV = True
 
     # carga la imagen a procesar
     root = tk.Tk()
@@ -62,6 +63,9 @@ def main():
         filmDoseObj.multichannel_correction_Dam()
         #filmDoseObj.multichannel_correction1()
 
+    if ApplyEnergyDependence:
+        filmDoseObj.EnergyDependence_correction(0.965,1.0343)
+
     # Salva la imagen en dosis.
     if GuardaDosis:
         application_window = tk.Tk()
@@ -75,9 +79,10 @@ def main():
         application_window.withdraw()
         file_path = filedialog.asksaveasfilename(title='Save Corrected Dose Image')
         application_window.withdraw()
-        filmDoseObj.SaveDoseImage(file_path, np.float(answer))
+        filmDoseObj.SaveDoseImage(file_path, float(answer))
 
     if GuardaPV:
+
         application_window = tk.Tk()
         application_window.withdraw()
         file_path = filedialog.asksaveasfilename(title='Save Corrected Pixel Value Image')

@@ -39,6 +39,10 @@ class FilmDose:
         self.Dref = np.empty(3)
         self.CalibrationCorrectionFactors = np.array([1.0, 1.0, 1.0])
 
+        # Parametros para correccion de dependencia energética
+        self.fad = 1.0
+        self.kintrinsic = 1.0
+
     def get_don(self):
         nod = np.clip(self.OD - self.OD0, 0.0)
         return nod
@@ -101,9 +105,9 @@ class FilmDose:
     def DoseArrays(self):
         darray = np.zeros(self.OD.shape, dtype=np.float)
         for c in [0, 1, 2]:
-            darray[:, :, c] = self.Calibration.get_dose_from_nod((self.OD[:, :, c] - self.OD0[c]), c)
+            darray[:, :, c] = self.fad*self.Calibration.get_dose_from_nod((self.OD[:, :, c] - self.OD0[c]), c)
         # Se permiten dosis hasta un 20% superiores al máximo de la curva de calibración
-        darray = np.clip(darray, 0, 1.2 * np.max(self.Calibration.D))
+        darray = np.clip(darray, 0, 1.5 * np.max(self.Calibration.D))
         return darray
 
     # Guarda la imagen en formato tiff 48-bits con valor de pixel lineal con la dosis
@@ -352,6 +356,36 @@ class FilmDose:
             b = f1 - a*od1
             fcorr = a*od + b
         return fcorr
+
+    # Correccion por dependencia energética
+    def EnergyDependence_correction(self, kint, frel):
+        from scipy import optimize
+        import ctypes  # An included library with Python install.
+
+        self.kintrinsic = kint
+        self.fad = frel
+
+        # Selecciona el área a la que se va a aplicar la corrección
+        ctypes.windll.user32.MessageBoxW(0, "Select area for energy dependence correction", "", 0)
+        rs = self.SelectRectangle()
+        x = [np.int(rs.corners[0][0]), np.int(rs.corners[0][2])]
+        y = [np.int(rs.corners[1][0]), np.int(rs.corners[1][2])]
+        od_roi = self.OD[y[0]:(y[1] + 1), x[0]:(x[1] + 1), 0:3]
+        self.alpha = np.ones([self.OD.shape[0], self.OD.shape[1]])
+        lim = 0.2
+        cont = 0.0
+        cont2 = 0.0
+        cont_lim = od_roi.shape[0]*od_roi.shape[1]*od_roi.shape[2]
+        for h in np.arange(od_roi.shape[0]):
+            if cont2/cont_lim > 0.05:
+                cont2 = 0.0
+            for w in np.arange(od_roi.shape[1]):
+                for c in np.arange(3):
+                    self.OD[h + y[0], w + x[0], c] = self.OD0[c] + \
+                                                     (self.OD[h + y[0], w + x[0], c] - self.OD0[c])/self.kintrinsic
+                    cont = cont + 1.0
+                    cont2 = cont2 + 1.0
+
 
     # Método de corrección multicanal para un parámetro multiplicativo a la densidad óptica.
     # Equivalente al implementado en el programa de matlab.

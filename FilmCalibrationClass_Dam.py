@@ -77,6 +77,7 @@ class FilmCalibration:
                 self.obtain_ODvalues_from_PV()
             self.OptimizeDevicParameters()
             self.OptimizeDevicParameters2()
+            #self.OptimizePercolParameters()
         else:
             # file with invalid extension
             print("The file has an invalid extension: " + Path(inputFile).suffix)
@@ -238,6 +239,7 @@ class FilmCalibration:
             # result.plot_fit()
             print(result.fit_report())
             print('')
+        self.show_calibration_plot()
 
     def OptimizeDevicParameters(self):
         for c in [0, 1, 2]:

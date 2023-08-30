@@ -9,11 +9,13 @@ Core functions used by unumpy and some of its submodules.
 # imports one of the submodules in order to make it available to the
 # user.
 
-
+from __future__ import division
 
 # Standard modules:
+from builtins import next
+from builtins import zip
+from builtins import range
 import sys
-import itertools
 import inspect
 
 # 3rd-party modules:
@@ -172,9 +174,11 @@ def wrap_array_func(func):
         for element in arr.flat:
             # floats, etc. might be present
             if isinstance(element, uncert_core.AffineScalarFunc):
-                # !!!! This forces an evaluation of the
+                # !!!! The following forces an evaluation of the
                 # derivatives!? Isn't this very slow, when
                 # working with a large number of arrays?
+                #
+                # !! set() is only needed for Python 2 compatibility:
                 variables |= set(element.derivatives.keys())
 
         # If the matrix has no variables, then the function value can be
@@ -233,7 +237,7 @@ def wrap_array_func(func):
             # Update of the list of variables and associated
             # derivatives, for each element:
             for (derivative_dict, derivative_value) in (
-                list(zip(derivatives.flat, numerical_deriv.flat))):
+                zip(derivatives.flat, numerical_deriv.flat)):
 
                 if derivative_value:
                     derivative_dict[var] = derivative_value
@@ -384,7 +388,8 @@ def func_with_deriv_to_uncert_func(func_with_derivatives):
         for element in array_version.flat:
             # floats, etc. might be present
             if isinstance(element, uncert_core.AffineScalarFunc):
-                variables |= element.derivatives.keys()
+                # !!! set() is only needed for Python 2 compatibility:
+                variables |= set(element.derivatives.keys())
 
         array_nominal = nominal_values(array_version)
         # Function value, then derivatives at array_nominal (the

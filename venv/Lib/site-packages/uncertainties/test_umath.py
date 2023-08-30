@@ -6,7 +6,8 @@ These tests can be run through the Nose testing framework.
 (c) 2010-2016 by Eric O. LEBIGOT (EOL).
 """
 
-
+from __future__ import division
+from __future__ import absolute_import
 
 # Standard modules
 import sys
@@ -174,7 +175,7 @@ def test_monte_carlo_comparison():
     assert numpy.vectorize(test_uncertainties.numbers_close)(
         covariances_this_module,
         covariances_samples,
-        0.05).all(), (
+        0.06).all(), (
         "The covariance matrices do not coincide between"
         " the Monte-Carlo simulation and the direct calculation:\n"
         "* Monte-Carlo:\n%s\n* Direct calculation:\n%s"
@@ -244,7 +245,7 @@ def test_math_module():
     # 2.6+, ValueError in Python 2.5,...):
     try:
         math.log(0)
-    except Exception as err_math:  # "as", for Python 2.6+
+    except Exception as err_math:
         # Python 3 does not make exceptions local variables: they are
         # restricted to their except block:
         err_math_args = err_math.args
@@ -252,19 +253,19 @@ def test_math_module():
 
     try:
         umath_core.log(0)
-    except exception_class as err_ufloat:  # "as", for Python 2.6+
+    except exception_class as err_ufloat:
         assert err_math_args == err_ufloat.args
     else:
         raise Exception('%s exception expected' % exception_class.__name__)
     try:
         umath_core.log(ufloat(0, 0))
-    except exception_class as err_ufloat:  # "as", for Python 2.6+
+    except exception_class as err_ufloat:
         assert err_math_args == err_ufloat.args
     else:
         raise Exception('%s exception expected' % exception_class.__name__)
     try:
         umath_core.log(ufloat(0, 1))
-    except exception_class as err_ufloat:  # "as", for Python 2.6+
+    except exception_class as err_ufloat:
         assert err_math_args == err_ufloat.args
     else:
         raise Exception('%s exception expected' % exception_class.__name__)
@@ -309,7 +310,7 @@ def test_power_special_cases():
     # 2.6+, ValueError in Python 2.5,...):
     try:
         math.pow(0, negative.nominal_value)
-    except Exception as err_math:  # "as", for Python 2.6+
+    except Exception as err_math:
         # Python 3 does not make exceptions local variables: they are
         # restricted to their except block:
         err_math_args = err_math.args
