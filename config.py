@@ -1,0 +1,16 @@
+working_dir = r"C:\datos\DosimetriaPelicula\Imagenes\FLASH_24-11-2023\originales"
+file_pattern = "Films_*.tif"    # None for interactive selection
+ApplyFS = True
+ApplyCalibration = True
+ApplyCalCorrection = False
+ApplyMultichannel = False
+ApplyEnergyDependence = False
+SaveDoseFile = True
+SavePVFile = True
+AutomaticOutput = True  # Applies automatic file names to output files adding suffixes. I "False" opens file dialog.
+FS_files_path = "C:\\datos\\DosimetriaPelicula\\ScannerCorrection"
+CalibrationFunction = "splines"
+CalibrationFile = r"C:\datos\DosimetriaPelicula\Imagenes\FLASH_24-11-2023\Calibracion_FLASH_Noviembre2023_0-15Gy.txt"
+OutputMaxDose = 65.535    # None for interactive prompt. 65.535 outputs pixel values with dose in mGy.
+EnDep_kint = 1.0          # 0.965 para I125
+EnDep_fad = 1.0           # 1.0343 para I125

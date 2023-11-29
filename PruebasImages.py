@@ -4,16 +4,18 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import simpledialog
 
+import config
+
 
 def main():
 
-    ApplyFS = False
+    ApplyFS = True
     ApplyCalibration = True
     ApplyCalCorrection = True
     ApplyMultichannel = False
     ApplyEnergyDependence = False
     GuardaDosis = True
-    GuardaPV = True
+    GuardaPV = False
 
     # carga la imagen a procesar
     root = tk.Tk()
@@ -60,8 +62,8 @@ def main():
 
     # Aplica método de corrección multicanal de Damian
     if ApplyMultichannel:
-        filmDoseObj.multichannel_correction_Dam()
-        #filmDoseObj.multichannel_correction1()
+        #filmDoseObj.multichannel_correction_Dam()
+        filmDoseObj.multichannel_correction1()
 
     if ApplyEnergyDependence:
         filmDoseObj.EnergyDependence_correction(0.965,1.0343)
